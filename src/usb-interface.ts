@@ -1,13 +1,13 @@
 /**
  * USB Interface for IT8951 Display Controller
- * 
- * Handles USB communication with the IT8951 device
+ *
+ * Handles USB communication with the IT8951 device using SCSI over USB protocol
  */
 
-import { getDeviceList, Device, Interface, InEndpoint, OutEndpoint } from 'usb';
-import { Commands, Registers, USB_VENDOR_ID, USB_PRODUCT_ID } from './constants.js';
+import { getDeviceList, Device, Interface, InEndpoint, OutEndpoint } from "usb";
+import { USB_VENDOR_ID, USB_PRODUCT_ID, Registers, DisplayModes } from "./constants.js";
 
-/** Device information returned by GET_DEV_INFO command */
+/** Device information returned by GET_SYS command */
 export interface DeviceInfo {
   width: number;
   height: number;
@@ -26,8 +26,31 @@ export interface USBInterfaceOptions {
   productId?: number;
 }
 
+// SCSI CBW/CSW constants
+const CBW_SIGNATURE = Buffer.from([0x55, 0x53, 0x42, 0x43]); // 'USBC'
+const CSW_SIGNATURE_VALUE = 0x53425355; // 'USBS' as little-endian uint32
+const CBW_LENGTH = 31;
+const CSW_LENGTH = 13;
+
+// IT8951 SCSI Commands (16 bytes each)
+const SCSI_GET_SYS = Buffer.from([
+  0xfe, 0x00, 0x38, 0x39, 0x35, 0x31, 0x80, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
+
+const SCSI_LD_IMAGE_AREA = Buffer.from([
+  0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
+
+const SCSI_DPY_AREA = Buffer.from([
+  0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
+
+const SCSI_PMIC_CTRL = Buffer.from([
+  0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
+
 /**
- * USB communication layer for IT8951
+ * USB communication layer for IT8951 using SCSI over USB
  */
 export class USBInterface {
   private device: Device | null = null;
@@ -36,10 +59,14 @@ export class USBInterface {
   private endpointIn: InEndpoint | null = null;
   private vendorId: number;
   private productId: number;
+  private timeout: number;
+  private tag: number = 0;
+  private _imageBufferAddress: number = 0;
 
   constructor(options: USBInterfaceOptions = {}) {
     this.vendorId = options.vendorId ?? USB_VENDOR_ID;
     this.productId = options.productId ?? USB_PRODUCT_ID;
+    this.timeout = options.timeout ?? 5000;
   }
 
   /**
@@ -47,30 +74,32 @@ export class USBInterface {
    */
   async open(): Promise<void> {
     const devices = getDeviceList();
-    
+
     for (const device of devices) {
-      if (device.deviceDescriptor.idVendor === this.vendorId &&
-          device.deviceDescriptor.idProduct === this.productId) {
+      if (
+        device.deviceDescriptor.idVendor === this.vendorId &&
+        device.deviceDescriptor.idProduct === this.productId
+      ) {
         this.device = device;
         break;
       }
     }
 
     if (!this.device) {
-      throw new Error('IT8951 device not found. Make sure it is connected via USB.');
+      throw new Error("IT8951 device not found. Make sure it is connected via USB.");
     }
 
     try {
       this.device.open();
-      
+
       // Get the first interface
       const interfaces = this.device.interfaces;
       if (!interfaces || interfaces.length === 0) {
-        throw new Error('No interfaces found on IT8951 device');
+        throw new Error("No interfaces found on IT8951 device");
       }
-      
+
       this.iface = interfaces[0];
-      
+
       if (this.iface.isKernelDriverActive?.()) {
         this.iface.detachKernelDriver();
       }
@@ -79,20 +108,25 @@ export class USBInterface {
       // Find bulk endpoints
       for (const ep of this.iface.endpoints) {
         const endpoint = ep as InEndpoint | OutEndpoint;
-        if (endpoint.direction === 'out' && endpoint.transferType === 2) { // bulk = 2
+        if (endpoint.direction === "out" && endpoint.transferType === 2) {
           this.endpointOut = endpoint as OutEndpoint;
-        } else if (endpoint.direction === 'in' && endpoint.transferType === 2) {
+        } else if (endpoint.direction === "in" && endpoint.transferType === 2) {
           this.endpointIn = endpoint as InEndpoint;
         }
       }
 
       if (!this.endpointOut || !this.endpointIn) {
-        throw new Error('Required bulk endpoints not found');
+        throw new Error("Required bulk endpoints not found");
       }
 
+      // Set timeout for endpoints
+      this.endpointOut.timeout = this.timeout;
+      this.endpointIn.timeout = this.timeout;
     } catch (error) {
       this.close();
-      throw new Error(`Failed to open IT8951 device: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to open IT8951 device: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -101,16 +135,37 @@ export class USBInterface {
    */
   close(): void {
     try {
+      if (this.endpointIn) {
+        try {
+          this.endpointIn.stopPoll?.();
+        } catch {
+          // Ignore errors when stopping poll
+        }
+      }
       if (this.iface) {
-        this.iface.release();
+        try {
+          this.iface.release();
+        } catch {
+          // Ignore release errors
+        }
       }
       if (this.device) {
-        this.device.close();
+        try {
+          this.device.close();
+        } catch (closeError) {
+          if (closeError instanceof Error && closeError.message.includes("pending request")) {
+            try {
+              this.device.reset(() => {});
+            } catch {
+              // Ignore reset errors
+            }
+          }
+        }
       }
     } catch (error) {
-      console.warn('Warning: Error closing device:', error);
+      console.warn("Warning: Error closing device:", error);
     }
-    
+
     this.device = null;
     this.iface = null;
     this.endpointOut = null;
@@ -118,142 +173,188 @@ export class USBInterface {
   }
 
   /**
-   * Write a command to the device
-   * @param cmd - Command code
-   * @param args - Command arguments
+   * Build a SCSI Command Block Wrapper (CBW)
    */
-  async writeCommand(cmd: Commands, args: number[] = []): Promise<void> {
-    if (!this.endpointOut) {
-      throw new Error('Device not opened');
-    }
+  private buildCBW(command: Buffer, dataLength: number, direction: number): Buffer {
+    const cbw = Buffer.alloc(CBW_LENGTH);
+    this.tag++;
 
-    // Command packet format: [preamble_high, preamble_low, cmd_low, cmd_high, ...args]
-    const preamble = 0x6000;
-    const buffer = Buffer.alloc(4 + args.length * 2);
-    
-    buffer.writeUInt16BE(preamble, 0);
-    buffer.writeUInt16LE(cmd, 2);
-    
-    for (let i = 0; i < args.length; i++) {
-      buffer.writeUInt16LE(args[i], 4 + i * 2);
-    }
+    // Copy signature
+    CBW_SIGNATURE.copy(cbw, 0);
+    cbw.writeUInt32LE(this.tag, 4);
+    cbw.writeUInt32LE(dataLength, 8);
+    cbw.writeUInt8(direction, 12);
+    cbw.writeUInt8(0, 13); // LUN
+    cbw.writeUInt8(16, 14); // Command length (always 16 for IT8951)
+    command.copy(cbw, 15);
 
-    await this.transferOut(buffer);
+    return cbw;
   }
 
   /**
-   * Write data to the device
-   * @param data - Array of 16-bit values
+   * Read and verify Command Status Wrapper (CSW)
    */
-  async writeData(data: number[]): Promise<void> {
-    if (!this.endpointOut) {
-      throw new Error('Device not opened');
+  private async readCSW(): Promise<void> {
+    const csw = await this.transferIn(CSW_LENGTH);
+
+    const signature = csw.readUInt32LE(0);
+    const tag = csw.readUInt32LE(4);
+    const status = csw.readUInt8(12);
+
+    if (signature !== CSW_SIGNATURE_VALUE) {
+      throw new Error(`Invalid CSW signature: 0x${signature.toString(16)}`);
     }
 
-    const preamble = 0x0000;
-    const buffer = Buffer.alloc(2 + data.length * 2);
-    
-    buffer.writeUInt16BE(preamble, 0);
-    
-    for (let i = 0; i < data.length; i++) {
-      buffer.writeUInt16LE(data[i], 2 + i * 2);
+    if (tag !== this.tag) {
+      throw new Error(`CSW tag mismatch: expected ${this.tag}, got ${tag}`);
     }
 
-    await this.transferOut(buffer);
-  }
-
-  /**
-   * Read data from the device
-   * @param count - Number of 16-bit words to read
-   * @returns Array of 16-bit values
-   */
-  async readData(count: number): Promise<number[]> {
-    if (!this.endpointIn) {
-      throw new Error('Device not opened');
+    if (status !== 0) {
+      throw new Error(`Command failed with status: ${status}`);
     }
-
-    const preamble = 0x1000;
-    const preambleBuffer = Buffer.alloc(2);
-    preambleBuffer.writeUInt16BE(preamble, 0);
-    
-    // Send read request
-    await this.transferOut(preambleBuffer);
-    
-    // Read response (2 bytes preamble + count * 2 bytes data)
-    const responseLength = 2 + count * 2;
-    const responseBuffer = await this.transferIn(responseLength);
-    
-    const result: number[] = [];
-    for (let i = 0; i < count; i++) {
-      const value = responseBuffer.readUInt16LE(2 + i * 2);
-      result.push(value);
-    }
-    
-    return result;
   }
 
   /**
-   * Read a single 16-bit integer from the device
+   * Execute a SCSI read command
    */
-  async readInt(): Promise<number> {
-    const data = await this.readData(1);
-    return data[0];
+  private async scsiRead(command: Buffer, length: number): Promise<Buffer> {
+    const cbw = this.buildCBW(command, length, 0x80);
+    await this.transferOut(cbw);
+
+    const data = await this.transferIn(length);
+    await this.readCSW();
+
+    return data;
   }
 
   /**
-   * Read a device register
-   * @param address - Register address
+   * Execute a SCSI write command with data
    */
-  async readRegister(address: Registers): Promise<number> {
-    await this.writeCommand(Commands.REG_RD, [address]);
-    return await this.readInt();
+  private async scsiWrite(command: Buffer, data: Buffer): Promise<void> {
+    const cbw = this.buildCBW(command, data.length, 0x00);
+    await this.transferOut(cbw);
+    await this.transferOut(data);
+    await this.readCSW();
   }
 
   /**
-   * Write to a device register
-   * @param address - Register address
-   * @param value - Value to write
+   * Execute a SCSI command with no data transfer
    */
-  async writeRegister(address: Registers, value: number): Promise<void> {
-    await this.writeCommand(Commands.REG_WR, [address]);
-    await this.writeData([value]);
+  private async scsiCommand(command: Buffer): Promise<void> {
+    const cbw = this.buildCBW(command, 0, 0x00);
+    await this.transferOut(cbw);
+    await this.readCSW();
   }
 
   /**
-   * Get device information
+   * Get device information using IT8951 GET_SYS command
    */
   async getDeviceInfo(): Promise<DeviceInfo> {
-    await this.writeCommand(Commands.GET_DEV_INFO);
-    const data = await this.readData(20);
+    // GET_SYS returns 112 bytes of system info
+    const data = await this.scsiRead(SCSI_GET_SYS, 112);
 
-    if (data.every(x => x === 0)) {
-      throw new Error('Communication with device failed');
-    }
+    // Parse system info (big-endian uint32 values)
+    const width = data.readUInt32BE(16);
+    const height = data.readUInt32BE(20);
+    const imageBufferAddress = data.readUInt32BE(28);
 
-    const width = data[0];
-    const height = data[1];
-    const imageBufferAddress = (data[3] << 16) | data[2];
-    
-    // Decode firmware and LUT versions
-    const decodeVersion = (start: number): string => {
-      let version = '';
-      for (let i = start; i < start + 8; i++) {
-        version += String.fromCharCode(data[i] >> 8);
-        version += String.fromCharCode(data[i] & 0xFF);
-      }
-      return version.replace(/\0/g, '').trim();
-    };
+    this._imageBufferAddress = imageBufferAddress;
 
-    const firmwareVersion = decodeVersion(4);
-    const lutVersion = decodeVersion(12);
-
+    // Firmware version is not directly available in this format
+    // Return placeholder values
     return {
       width,
       height,
       imageBufferAddress,
-      firmwareVersion,
-      lutVersion,
+      firmwareVersion: "N/A",
+      lutVersion: "N/A",
     };
+  }
+
+  /**
+   * Load image area to the display buffer
+   */
+  async loadImageArea(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    imageData: Buffer,
+  ): Promise<void> {
+    // Build area info (20 bytes, big-endian)
+    const areaInfo = Buffer.alloc(20);
+    areaInfo.writeUInt32BE(this._imageBufferAddress, 0);
+    areaInfo.writeUInt32BE(x, 4);
+    areaInfo.writeUInt32BE(y, 8);
+    areaInfo.writeUInt32BE(width, 12);
+    areaInfo.writeUInt32BE(height, 16);
+
+    // Combine area info and image data
+    const data = Buffer.concat([areaInfo, imageData]);
+
+    await this.scsiWrite(SCSI_LD_IMAGE_AREA, data);
+  }
+
+  /**
+   * Display area on the e-paper
+   */
+  async displayArea(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    mode: DisplayModes,
+    waitReady: boolean = true,
+  ): Promise<void> {
+    // Build display area info (28 bytes, big-endian)
+    const displayInfo = Buffer.alloc(28);
+    displayInfo.writeUInt32BE(this._imageBufferAddress, 0);
+    displayInfo.writeUInt32BE(mode, 4);
+    displayInfo.writeUInt32BE(x, 8);
+    displayInfo.writeUInt32BE(y, 12);
+    displayInfo.writeUInt32BE(width, 16);
+    displayInfo.writeUInt32BE(height, 20);
+    displayInfo.writeUInt32BE(waitReady ? 1 : 0, 24);
+
+    await this.scsiWrite(SCSI_DPY_AREA, displayInfo);
+  }
+
+  /**
+   * Set VCOM value and/or power state
+   */
+  async setPowerVcom(vcom: number | null, powerOn: boolean | null): Promise<void> {
+    const cmd = Buffer.from(SCSI_PMIC_CTRL);
+
+    if (vcom !== null) {
+      cmd[7] = (vcom >> 8) & 0xff;
+      cmd[8] = vcom & 0xff;
+      cmd[9] = 1; // Set VCOM
+    }
+
+    if (powerOn !== null) {
+      cmd[10] = 1; // Do power control
+      cmd[11] = powerOn ? 1 : 0;
+    }
+
+    await this.scsiCommand(cmd);
+  }
+
+  /**
+   * Read a device register (legacy support - not available over USB SCSI)
+   */
+  async readRegister(_address: Registers): Promise<number> {
+    // IT8951 USB doesn't have direct register access via SCSI
+    // This is mainly for SPI interface compatibility
+    console.warn("Register access not fully supported over USB SCSI interface");
+    return 0;
+  }
+
+  /**
+   * Write to a device register (legacy support - not available over USB SCSI)
+   */
+  async writeRegister(_address: Registers, _value: number): Promise<void> {
+    // IT8951 USB doesn't have direct register access via SCSI
+    console.warn("Register access not fully supported over USB SCSI interface");
   }
 
   /**
@@ -261,7 +362,7 @@ export class USBInterface {
    */
   private async transferOut(buffer: Buffer): Promise<void> {
     if (!this.endpointOut) {
-      throw new Error('Device not opened');
+      throw new Error("Device not opened");
     }
 
     return new Promise((resolve, reject) => {
@@ -280,7 +381,7 @@ export class USBInterface {
    */
   private async transferIn(length: number): Promise<Buffer> {
     if (!this.endpointIn) {
-      throw new Error('Device not opened');
+      throw new Error("Device not opened");
     }
 
     return new Promise((resolve, reject) => {
@@ -288,7 +389,7 @@ export class USBInterface {
         if (error) {
           reject(error);
         } else if (!buffer) {
-          reject(new Error('No data received'));
+          reject(new Error("No data received"));
         } else {
           resolve(buffer);
         }
@@ -301,5 +402,12 @@ export class USBInterface {
    */
   isConnected(): boolean {
     return this.device !== null;
+  }
+
+  /**
+   * Get image buffer address
+   */
+  get imageBufferAddress(): number {
+    return this._imageBufferAddress;
   }
 }

@@ -1,11 +1,11 @@
 /**
  * Auto Display Module
- * 
+ *
  * Provides automatic partial update functionality by tracking frame buffer changes
  */
 
-import { EPD } from './epd.js';
-import { DisplayModes, PixelModes, LOW_BPP_MODES } from './constants.js';
+import { EPD } from "./epd.js";
+import { DisplayModes, LOW_BPP_MODES } from "./constants.js";
 
 /** Bounding box coordinates [minX, minY, maxX, maxY] */
 export type BoundingBox = [number, number, number, number];
@@ -13,7 +13,7 @@ export type BoundingBox = [number, number, number, number];
 /** Options for AutoEPDDisplay */
 export interface AutoDisplayOptions {
   /** Rotation mode */
-  rotate?: 'none' | 'cw' | 'ccw' | 'flip';
+  rotate?: "none" | "cw" | "ccw" | "flip";
   /** Mirror horizontally */
   mirror?: boolean;
   /** Track grayscale changes for better partial updates */
@@ -29,31 +29,27 @@ export abstract class AutoDisplay {
   protected previousFrame: Uint8Array | null = null;
   protected displayWidth: number;
   protected displayHeight: number;
-  
-  private rotate: 'none' | 'cw' | 'ccw' | 'flip';
+
+  private rotate: "none" | "cw" | "ccw" | "flip";
   private mirror: boolean;
   private trackGray: boolean;
   private grayChangeBBox: BoundingBox | null = null;
 
-  constructor(
-    width: number,
-    height: number,
-    options: AutoDisplayOptions = {}
-  ) {
+  constructor(width: number, height: number, options: AutoDisplayOptions = {}) {
     this.displayWidth = width;
     this.displayHeight = height;
-    this.rotate = options.rotate ?? 'none';
+    this.rotate = options.rotate ?? "none";
     this.mirror = options.mirror ?? false;
     this.trackGray = options.trackGray ?? false;
 
     // Allocate frame buffer
     const [bufWidth, bufHeight] = this.getBufferDimensions();
-    this.frameBuffer = new Uint8Array(bufWidth * bufHeight).fill(0xFF);
+    this.frameBuffer = new Uint8Array(bufWidth * bufHeight).fill(0xff);
   }
 
   /** Get actual buffer dimensions based on rotation */
   private getBufferDimensions(): [number, number] {
-    if (this.rotate === 'cw' || this.rotate === 'ccw') {
+    if (this.rotate === "cw" || this.rotate === "ccw") {
       return [this.displayHeight, this.displayWidth];
     }
     return [this.displayWidth, this.displayHeight];
@@ -77,7 +73,7 @@ export abstract class AutoDisplay {
    */
   async drawFull(mode: DisplayModes): Promise<void> {
     const frame = this.getRotatedFrame();
-    
+
     await this.update(frame, [0, 0, this.displayWidth, this.displayHeight], mode);
 
     if (this.trackGray) {
@@ -110,7 +106,7 @@ export abstract class AutoDisplay {
 
     if (this.trackGray) {
       this.grayChangeBBox = this.mergeBBox(this.grayChangeBBox, diffBox);
-      
+
       if (mode !== DisplayModes.DU) {
         diffBox = this.grayChangeBBox;
         this.grayChangeBBox = null;
@@ -125,7 +121,7 @@ export abstract class AutoDisplay {
       if (mode === DisplayModes.DU) {
         this.makeChangesBW(
           this.extractRegion(this.previousFrame!, minX, minY, maxX - minX, maxY - minY),
-          buf
+          buf,
         );
       }
 
@@ -140,7 +136,7 @@ export abstract class AutoDisplay {
    */
   async clear(): Promise<void> {
     // Fill frame buffer with white
-    this.frameBuffer.fill(0xFF);
+    this.frameBuffer.fill(0xff);
     await this.drawFull(DisplayModes.INIT);
   }
 
@@ -153,7 +149,7 @@ export abstract class AutoDisplay {
   protected abstract update(
     data: Uint8Array,
     region: [number, number, number, number],
-    mode: DisplayModes
+    mode: DisplayModes,
   ): Promise<void>;
 
   /** Get rotated/mirrored frame */
@@ -173,20 +169,15 @@ export abstract class AutoDisplay {
   }
 
   /** Get source index for a given destination coordinate */
-  private getSourceIndex(
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): number {
+  private getSourceIndex(x: number, y: number, width: number, height: number): number {
     const srcWidth = this.displayWidth;
-    
+
     switch (this.rotate) {
-      case 'cw':
+      case "cw":
         return y * srcWidth + (srcWidth - 1 - x);
-      case 'ccw':
+      case "ccw":
         return (height - 1 - y) * srcWidth + x;
-      case 'flip':
+      case "flip":
         return (height - 1 - y) * srcWidth + (width - 1 - x);
       default:
         if (this.mirror) {
@@ -202,7 +193,7 @@ export abstract class AutoDisplay {
     x: number,
     y: number,
     width: number,
-    height: number
+    height: number,
   ): Uint8Array {
     const [bufWidth] = this.getBufferDimensions();
     const region = new Uint8Array(width * height);
@@ -220,7 +211,7 @@ export abstract class AutoDisplay {
   private computeDiffBox(
     a: Uint8Array | null,
     b: Uint8Array,
-    roundTo: number = 2
+    roundTo: number = 2,
   ): BoundingBox | null {
     if (a === null) {
       return [0, 0, this.width, this.height];
@@ -253,12 +244,9 @@ export abstract class AutoDisplay {
   }
 
   /** Round bounding box to multiples */
-  private roundBBox(
-    bbox: BoundingBox,
-    roundTo: number = 4
-  ): BoundingBox {
+  private roundBBox(bbox: BoundingBox, roundTo: number = 4): BoundingBox {
     const [minX, minY, maxX, maxY] = bbox;
-    
+
     const roundedMinX = minX - (minX % roundTo);
     const roundedMaxX = maxX + (roundTo - 1) - ((maxX - 1) % roundTo);
     const roundedMinY = minY - (minY % roundTo);
@@ -268,19 +256,11 @@ export abstract class AutoDisplay {
   }
 
   /** Merge two bounding boxes */
-  private mergeBBox(
-    a: BoundingBox | null,
-    b: BoundingBox | null
-  ): BoundingBox | null {
+  private mergeBBox(a: BoundingBox | null, b: BoundingBox | null): BoundingBox | null {
     if (a === null) return b;
     if (b === null) return a;
 
-    return [
-      Math.min(a[0], b[0]),
-      Math.min(a[1], b[1]),
-      Math.max(a[2], b[2]),
-      Math.max(a[3], b[3]),
-    ];
+    return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
   }
 
   /** Convert changes to black/white for DU mode */
@@ -300,10 +280,7 @@ export abstract class AutoDisplay {
 export class AutoEPDDisplay extends AutoDisplay {
   private epd: EPD;
 
-  constructor(
-    epd: EPD,
-    options: AutoDisplayOptions = {}
-  ) {
+  constructor(epd: EPD, options: AutoDisplayOptions = {}) {
     super(epd.width, epd.height, options);
     this.epd = epd;
   }
@@ -311,7 +288,7 @@ export class AutoEPDDisplay extends AutoDisplay {
   protected async update(
     data: Uint8Array,
     region: [number, number, number, number],
-    mode: DisplayModes
+    mode: DisplayModes,
   ): Promise<void> {
     const [x, y, width, height] = region;
 
@@ -324,7 +301,6 @@ export class AutoEPDDisplay extends AutoDisplay {
       y,
       width,
       height,
-      pixelFormat: PixelModes.M_4BPP,
     });
 
     // Display the sent image

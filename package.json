@@ -2,47 +2,48 @@
   "name": "it8951-usb-ts",
   "version": "1.0.0",
   "description": "Node.js + TypeScript driver for IT8951 e-paper display controller via USB",
+  "keywords": [
+    "display",
+    "e-paper",
+    "epaper",
+    "it8951",
+    "typescript",
+    "usb"
+  ],
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lfeng/it8951-usb-ts.git"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "jest --coverage",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "lint": "eslint src/**/*.ts",
     "prepublishOnly": "npm run build",
     "test:watch": "jest --watch",
     "test:verbose": "jest --verbose --coverage"
   },
-  "keywords": [
-    "it8951",
-    "e-paper",
-    "epaper",
-    "display",
-    "usb",
-    "typescript"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
     "usb": "^2.13.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^20.10.0",
-    "@typescript-eslint/eslint-plugin": "^6.13.0",
-    "@typescript-eslint/parser": "^6.13.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
     "eslint": "^8.55.0",
     "jest": "^30.2.0",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.0"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/lfeng/it8951-usb-ts.git"
   }
 }
