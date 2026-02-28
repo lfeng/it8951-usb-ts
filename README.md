@@ -1,5 +1,7 @@
 # IT8951 USB Display Driver (TypeScript)
 
+English Version | [中文版本](./README_CN.md)
+
 Node.js + TypeScript driver for IT8951 e-paper display controllers via USB.
 
 ## Features
