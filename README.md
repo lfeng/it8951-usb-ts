@@ -8,6 +8,7 @@ Node.js + TypeScript driver for IT8951 e-paper display controllers via USB.
 - 🔌 **USB Interface** - Cross-platform USB communication (no Raspberry Pi required)
 - 🎨 **Partial Updates** - Automatic detection and update of changed regions
 - 🔄 **Multiple Display Modes** - Support for INIT, DU, GC16, A2, and more
+- ✅ **Comprehensive Testing** - Jest test suite with 60+ tests and coverage reporting
 - 📝 **Well Documented** - Comprehensive examples and API documentation
 - 🚀 **Modern ES Modules** - Uses ES module syntax
 
@@ -104,6 +105,53 @@ epd.close();
 | `GC16` | Grayscale 16 | Medium | High | Images |
 | `A2` | Animation | Very Fast | Low | Video |
 
+## Testing
+
+This project includes a comprehensive test suite using Jest with TypeScript support.
+
+### Running Tests
+
+```bash
+# Run all tests with coverage
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with verbose output
+npm run test:verbose
+```
+
+### Test Coverage
+
+The test suite includes:
+
+- **Unit Tests**: Tests for individual modules (constants, usb-interface, epd, auto-display)
+- **Integration Tests**: Tests for module interactions and error handling
+- **Coverage Reports**: HTML and text coverage reports generated in `coverage/` directory
+
+Current coverage:
+- **Statements**: 53%+
+- **Branches**: 49%+
+- **Functions**: 55%+
+- **Lines**: 53%+
+
+### Test Files
+
+- `src/__tests__/constants.test.ts` - Constants and enum validation
+- `src/__tests__/usb-interface.test.ts` - USB communication layer tests
+- `src/__tests__/epd.test.ts` - EPD controller tests
+- `src/__tests__/auto-display.test.ts` - Auto display and partial update tests
+- `src/__tests__/integration.test.ts` - Integration and error handling tests
+
+### Coverage Reports
+
+After running tests, view the HTML coverage report:
+
+```bash
+open coverage/index.html
+```
+
 ## Development
 
 ```bash
@@ -112,6 +160,9 @@ npm run build
 
 # Watch mode
 npm run dev
+
+# Run tests
+npm test
 
 # Run example
 node examples/basic.js
