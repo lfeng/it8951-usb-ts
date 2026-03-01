@@ -18,6 +18,15 @@ export {
   DEFAULT_DISPLAY_MODES,
   USB_VENDOR_ID,
   USB_PRODUCT_ID,
+  VCOM_PRESETS,
+  SCSIStatus,
+  EPDError,
+  VCOMOutOfRangeError,
+  SCSIError,
+  DeviceNotFoundError,
+  RefreshRateError,
+  alignRowLength,
+  padBuffer,
 } from './constants.js';
 
 // Export types

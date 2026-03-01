@@ -5,7 +5,7 @@
  */
 
 import { getDeviceList, Device, Interface, InEndpoint, OutEndpoint } from "usb";
-import { USB_VENDOR_ID, USB_PRODUCT_ID, Registers, DisplayModes, EndianTypes, SCSIStatus, SCSIError } from "./constants.js";
+import { USB_VENDOR_ID, USB_PRODUCT_ID, Registers, DisplayModes, EndianTypes } from "./constants.js";
 
 /** Device information returned by GET_SYS command */
 export interface DeviceInfo {
@@ -23,9 +23,9 @@ export interface USBInterfaceOptions {
   /** Vendor ID (default: IT8951 vendor ID) */
   vendorId?: number;
   /** Product ID (default: IT8951 product ID) */
-  //** VCOM byte order (default: LITTLE endian) */
-  vcomEndian?: EndianTypes;
   productId?: number;
+  /** VCOM byte order (default: LITTLE endian) */
+  vcomEndian?: EndianTypes;
 }
 
 // SCSI CBW/CSW constants
@@ -325,6 +325,9 @@ export class USBInterface {
 
   /**
    * Set VCOM value and/or power state
+   * @param vcom - VCOM value in millivolts (e.g., 2000 for -2.0V), or null to skip
+   * @param powerOn - Power state (true = on, false = off), or null to skip
+   * @remarks VCOM byte order is determined by the vcomEndian constructor option
    */
   async setPowerVcom(vcom: number | null, powerOn: boolean | null): Promise<void> {
     const cmd = Buffer.from(SCSI_PMIC_CTRL);

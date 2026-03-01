@@ -159,6 +159,7 @@ export class EPD {
    * @param width - Width of region
    * @param height - Height of region
    * @param mode - Display mode
+   * @throws {RefreshRateError} If refresh interval is too short
    */
   async displayArea(
     x: number,
@@ -167,13 +168,15 @@ export class EPD {
     height: number,
     mode: DisplayModes,
   ): Promise<void> {
-    // Check refresh rate
-    const now = Date.now();
-    const interval = now - this.lastRefreshTime;
-    if (interval < this.minRefreshInterval) {
-      throw new RefreshRateError(interval, this.minRefreshInterval);
+    // Check refresh rate - only apply if lastRefreshTime is set
+    if (this.lastRefreshTime > 0) {
+      const now = Date.now();
+      const interval = now - this.lastRefreshTime;
+      if (interval < this.minRefreshInterval) {
+        throw new RefreshRateError(interval, this.minRefreshInterval);
+      }
     }
-    this.lastRefreshTime = now;
+    this.lastRefreshTime = Date.now();
     
     await this.usb.displayArea(x, y, width, height, mode, true);
   }
@@ -181,6 +184,7 @@ export class EPD {
   /**
    * Set VCOM voltage
    * @param vcom - VCOM voltage (typically -1.5 to -2.5)
+   * @throws {VCOMOutOfRangeError} If VCOM voltage is outside the valid range
    */
   async setVCOM(vcom: number): Promise<void> {
     this.validateVCOM(vcom);
@@ -191,6 +195,8 @@ export class EPD {
 
   /**
    * Get current VCOM voltage
+   * @returns Current VCOM voltage value
+   * @remarks USB SCSI interface does not support reading VCOM from device, returns the last set value
    */
   async getVCOM(): Promise<number> {
     // VCOM reading not directly available via SCSI
