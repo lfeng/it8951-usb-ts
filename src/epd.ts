@@ -277,6 +277,67 @@ export class EPD {
   }
 
   /**
+   * Load image data to an indexed buffer location in device memory
+   * @param index - Buffer index (0-15)
+   * @param buffer - Pixel data (1 byte per pixel, values 0-255 grayscale)
+   * @param options - Optional area and rotation settings
+   * @remarks Index Mode allows up to 16 separate image buffers
+   */
+  async loadImageAreaIndexed(
+    index: number,
+    buffer: Uint8Array,
+    options: {
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+      rotate?: Rotate;
+    } = {},
+  ): Promise<void> {
+    const x = options.x ?? 0;
+    const y = options.y ?? 0;
+    const width = options.width ?? this.width;
+    const height = options.height ?? this.height;
+
+    // Convert Uint8Array to Buffer
+    const imageData = Buffer.from(buffer);
+
+    await this.usb.loadImageAreaIndexed(index, x, y, width, height, imageData);
+  }
+
+  /**
+   * Display a region from an indexed buffer location
+   * @param index - Buffer index (0-15)
+   * @param x - X coordinate
+   * @param y - Y coordinate
+   * @param width - Width of region
+   * @param height - Height of region
+   * @param mode - Display mode
+   * @throws {RefreshRateError} If refresh interval is too short
+   * @remarks Index Mode allows displaying from up to 16 separate image buffers
+   */
+  async displayAreaIndexed(
+    index: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    mode: DisplayModes,
+  ): Promise<void> {
+    // Check refresh rate - only apply if lastRefreshTime is set
+    if (this.lastRefreshTime > 0) {
+      const now = Date.now();
+      const interval = now - this.lastRefreshTime;
+      if (interval < this.minRefreshInterval) {
+        throw new RefreshRateError(interval, this.minRefreshInterval);
+      }
+    }
+    this.lastRefreshTime = Date.now();
+    
+    await this.usb.displayAreaIndexed(index, x, y, width, height, mode, true);
+  }
+
+  /**
    * Validate VCOM voltage range
    */
   private validateVCOM(vcom: number): void {

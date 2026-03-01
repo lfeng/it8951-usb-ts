@@ -168,7 +168,7 @@ describe('AutoDisplay', () => {
       await display.drawPartial(DisplayModes.DU);
 
       expect(display.updateCalls).toHaveLength(1);
-      const [, , width, height] = display.updateCalls[0].region;
+      const [, , width] = display.updateCalls[0].region;
       expect(width % 8).toBe(0);
     });
   });
@@ -220,7 +220,7 @@ describe('AutoDisplay', () => {
 
       const diffBox = (display as any).computeDiffBox(frame1, frame2, 8);
       if (diffBox) {
-        const [minX, minY, maxX, maxY] = diffBox;
+        const [minX, minY] = diffBox;
         expect(minX % 8).toBe(0);
         expect(minY % 8).toBe(0);
       }

@@ -4,7 +4,6 @@
  */
 
 import { USBInterface } from '../usb-interface.js';
-import { USB_VENDOR_ID, USB_PRODUCT_ID } from '../constants.js';
 
 describe('USBInterface', () => {
   let usbInterface: USBInterface;

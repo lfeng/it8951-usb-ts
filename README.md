@@ -10,6 +10,9 @@ Node.js + TypeScript driver for IT8951 e-paper display controllers via USB.
 - 🔌 **USB Interface** - Cross-platform USB communication (no Raspberry Pi required)
 - 🎨 **Partial Updates** - Automatic detection and update of changed regions
 - 🔄 **Multiple Display Modes** - Support for INIT, DU, GC16, A2, and more
+- 🗂️ **Index Mode** - Support for up to 16 separate image buffers
+- 🚀 **Fast Write** - Optimized memory write command (up to 30MB/s)
+- 🔍 **Device Identification** - SCSI Inquiry support to verify IT8951 controllers
 - ✅ **Comprehensive Testing** - Jest test suite with 60+ tests and coverage reporting
 - 📝 **Well Documented** - Comprehensive examples and API documentation
 - 🚀 **Modern ES Modules** - Uses ES module syntax
@@ -77,6 +80,67 @@ await epd.clear();
 await epd.displayArea(0, 0, epd.width, epd.height, DisplayModes.GC16);
 
 epd.close();
+```
+
+### Device Identification
+
+```typescript
+import { USBInterface } from './src/usb-interface.js';
+
+const usb = new USBInterface();
+await usb.open();
+
+// Check if device is IT8951
+const isIT8951 = await usb.identify();
+console.log(`Device is IT8951: ${isIT8951}`);
+
+// Get raw inquiry data
+const inquiry = await usb.scsiInquiry();
+console.log('Vendor:', inquiry.subarray(8, 16).toString('ascii').trim());
+console.log('Product:', inquiry.subarray(16, 32).toString('ascii').trim());
+
+usb.close();
+```
+
+### Index Mode (Multiple Buffers)
+
+```typescript
+import { EPD, DisplayModes } from './src/index.js';
+
+const epd = new EPD();
+await epd.init();
+
+// Load images to different buffer indices
+const buffer1 = new Uint8Array(epd.width * epd.height).fill(200);
+const buffer2 = new Uint8Array(epd.width * epd.height).fill(100);
+
+await epd.loadImageAreaIndexed(0, buffer1); // Load to buffer 0
+await epd.loadImageAreaIndexed(1, buffer2); // Load to buffer 1
+
+// Display from different buffers
+await epd.displayAreaIndexed(0, 0, 0, epd.width, epd.height, DisplayModes.GC16);
+await new Promise(resolve => setTimeout(resolve, 2000));
+await epd.displayAreaIndexed(1, 0, 0, epd.width, epd.height, DisplayModes.GC16);
+
+epd.close();
+```
+
+### Fast Write Memory
+
+```typescript
+import { USBInterface } from './src/usb-interface.js';
+
+const usb = new USBInterface();
+await usb.open();
+
+const info = await usb.getDeviceInfo();
+const address = info.imageBufferAddress;
+
+// Fast write for large data transfers (up to 30MB/s)
+const largeBuffer = Buffer.alloc(1024 * 1024); // 1MB
+await usb.fastWriteMemory(address, largeBuffer);
+
+usb.close();
 ```
 
 ### Auto Display (Partial Updates)
@@ -178,9 +242,25 @@ node examples/basic.js
 - `close()` - Close connection
 - `clear()` - Clear display
 - `loadImageArea(buffer, options)` - Load image
+- `loadImageAreaIndexed(index, buffer, options)` - Load image to indexed buffer
 - `displayArea(x, y, w, h, mode)` - Display region
+- `displayAreaIndexed(index, x, y, w, h, mode)` - Display from indexed buffer
 - `waitDisplayReady()` - Wait for ready
 - `setVCOM(voltage)` / `getVCOM()` - VCOM control
+
+### USBInterface Class
+
+- `open()` - Open USB connection
+- `close()` - Close connection
+- `scsiInquiry()` - Send SCSI Inquiry command
+- `identify()` - Check if device is IT8951
+- `getDeviceInfo()` - Get device information
+- `loadImageArea(x, y, w, h, data)` - Load image data
+- `loadImageAreaIndexed(index, x, y, w, h, data)` - Load to indexed buffer
+- `displayArea(x, y, w, h, mode, wait)` - Display area
+- `displayAreaIndexed(index, x, y, w, h, mode, wait)` - Display from indexed buffer
+- `fastWriteMemory(addr, data)` - Fast memory write (up to 30MB/s)
+- `setPowerVcom(vcom, powerOn)` - Set VCOM and power state
 
 ### Properties
 

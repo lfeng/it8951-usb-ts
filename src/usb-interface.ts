@@ -51,6 +51,14 @@ const SCSI_PMIC_CTRL = Buffer.from([
   0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
+const SCSI_INQUIRY = Buffer.from([
+  0x12, 0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
+
+const SCSI_FAST_WRITE = Buffer.from([
+  0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
+
 /**
  * USB communication layer for IT8951 using SCSI over USB
  */
@@ -251,6 +259,41 @@ export class USBInterface {
   }
 
   /**
+   * Send SCSI Inquiry command to query device information
+   * @returns Raw inquiry data (36 bytes standard inquiry response)
+   * @remarks Returns Vendor ID, Product ID, Product Revision, and device type
+   */
+  async scsiInquiry(): Promise<Buffer> {
+    // Standard SCSI Inquiry returns 36 bytes
+    const data = await this.scsiRead(SCSI_INQUIRY, 36);
+    return data;
+  }
+
+  /**
+   * Identify if the connected device is an IT8951 controller
+   * @returns True if device is IT8951, false otherwise
+   * @remarks Checks if the inquiry response contains 'Generic Storage RamDisc'
+   */
+  async identify(): Promise<boolean> {
+    try {
+      const inquiry = await this.scsiInquiry();
+      
+      // Vendor ID: bytes 8-15 (8 chars)
+      const vendorId = inquiry.subarray(8, 16).toString('ascii').trim();
+      // Product ID: bytes 16-31 (16 chars)
+      const productId = inquiry.subarray(16, 32).toString('ascii').trim();
+      
+      // IT8951 typically identifies as 'Generic Storage RamDisc'
+      const fullId = `${vendorId} ${productId}`;
+      
+      return fullId.includes('Generic Storage') && fullId.includes('RamDisc');
+    } catch (error) {
+      console.warn('SCSI Inquiry failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get device information using IT8951 GET_SYS command
    */
   async getDeviceInfo(): Promise<DeviceInfo> {
@@ -300,6 +343,46 @@ export class USBInterface {
   }
 
   /**
+   * Load image area to an indexed buffer location
+   * @param index - Buffer index (0-15)
+   * @param x - X coordinate
+   * @param y - Y coordinate
+   * @param width - Width
+   * @param height - Height
+   * @param imageData - Image data buffer
+   * @remarks Index Mode allows up to 16 separate image buffers.
+   * Address format: 0x80000000 | (index & 0x0F)
+   */
+  async loadImageAreaIndexed(
+    index: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    imageData: Buffer,
+  ): Promise<void> {
+    if (index < 0 || index > 15) {
+      throw new Error('Buffer index must be between 0 and 15');
+    }
+
+    // Index Mode address: 0x80000000 | (index & 0x0F)
+    const indexedAddress = 0x80000000 | (index & 0x0F);
+
+    // Build area info (20 bytes, big-endian)
+    const areaInfo = Buffer.alloc(20);
+    areaInfo.writeUInt32BE(indexedAddress, 0);
+    areaInfo.writeUInt32BE(x, 4);
+    areaInfo.writeUInt32BE(y, 8);
+    areaInfo.writeUInt32BE(width, 12);
+    areaInfo.writeUInt32BE(height, 16);
+
+    // Combine area info and image data
+    const data = Buffer.concat([areaInfo, imageData]);
+
+    await this.scsiWrite(SCSI_LD_IMAGE_AREA, data);
+  }
+
+  /**
    * Display area on the e-paper
    */
   async displayArea(
@@ -313,6 +396,47 @@ export class USBInterface {
     // Build display area info (28 bytes, big-endian)
     const displayInfo = Buffer.alloc(28);
     displayInfo.writeUInt32BE(this._imageBufferAddress, 0);
+    displayInfo.writeUInt32BE(mode, 4);
+    displayInfo.writeUInt32BE(x, 8);
+    displayInfo.writeUInt32BE(y, 12);
+    displayInfo.writeUInt32BE(width, 16);
+    displayInfo.writeUInt32BE(height, 20);
+    displayInfo.writeUInt32BE(waitReady ? 1 : 0, 24);
+
+    await this.scsiWrite(SCSI_DPY_AREA, displayInfo);
+  }
+
+  /**
+   * Display area from an indexed buffer location
+   * @param index - Buffer index (0-15)
+   * @param x - X coordinate
+   * @param y - Y coordinate
+   * @param width - Width
+   * @param height - Height
+   * @param mode - Display mode
+   * @param waitReady - Wait for display to be ready (default: true)
+   * @remarks Index Mode allows displaying from up to 16 separate image buffers.
+   * Address format: 0x80000000 | (index & 0x0F)
+   */
+  async displayAreaIndexed(
+    index: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    mode: DisplayModes,
+    waitReady: boolean = true,
+  ): Promise<void> {
+    if (index < 0 || index > 15) {
+      throw new Error('Buffer index must be between 0 and 15');
+    }
+
+    // Index Mode address: 0x80000000 | (index & 0x0F)
+    const indexedAddress = 0x80000000 | (index & 0x0F);
+
+    // Build display area info (28 bytes, big-endian)
+    const displayInfo = Buffer.alloc(28);
+    displayInfo.writeUInt32BE(indexedAddress, 0);
     displayInfo.writeUInt32BE(mode, 4);
     displayInfo.writeUInt32BE(x, 8);
     displayInfo.writeUInt32BE(y, 12);
@@ -368,6 +492,25 @@ export class USBInterface {
   async writeRegister(_address: Registers, _value: number): Promise<void> {
     // IT8951 USB doesn't have direct register access via SCSI
     console.warn("Register access not fully supported over USB SCSI interface");
+  }
+
+  /**
+   * Fast Write Memory command (0xA5)
+   * @param addr - Target memory address
+   * @param data - Data to write
+   * @remarks Supports up to 30MB/s write speed. Uses optimized SCSI command for bulk writes.
+   */
+  async fastWriteMemory(addr: number, data: Buffer): Promise<void> {
+    const cmd = Buffer.from(SCSI_FAST_WRITE);
+    
+    // Set address in command (bytes 2-5, big-endian)
+    cmd.writeUInt32BE(addr, 2);
+    
+    // Set data length (bytes 7-10, big-endian)
+    cmd.writeUInt32BE(data.length, 7);
+    
+    // Write command and data
+    await this.scsiWrite(cmd, data);
   }
 
   /**

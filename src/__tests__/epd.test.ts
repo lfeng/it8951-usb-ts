@@ -4,7 +4,7 @@
  */
 
 import { EPD } from '../epd.js';
-import { DisplayModes, PixelModes, Rotate, Registers } from '../constants.js';
+import { PixelModes } from '../constants.js';
 
 describe('EPD', () => {
   let epd: EPD;
