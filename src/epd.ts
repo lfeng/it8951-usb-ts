@@ -5,14 +5,18 @@
  */
 
 import { USBInterface } from "./usb-interface.js";
-import { DisplayModes, Rotate } from "./constants.js";
+import { DisplayModes, Rotate, VCOM_PRESETS, RefreshRateError, EndianTypes, VCOMOutOfRangeError } from "./constants.js";
 
 /** Configuration for EPD */
 export interface EPDConfig {
-  /** VCOM voltage (typically -1.5 to -2.5) */
-  vcom?: number;
+  /** VCOM voltage (typically -1.5 to -2.5) or use preset name */
+  vcom?: number | keyof typeof VCOM_PRESETS;
   /** USB timeout in milliseconds */
   timeout?: number;
+  /** Minimum refresh interval in milliseconds (default: 1000ms) */
+  minRefreshInterval?: number;
+  /** VCOM byte order (default: LITTLE endian) */
+  vcomEndian?: EndianTypes;
 }
 
 /** Image area specification */
@@ -33,6 +37,8 @@ export interface ImageArea {
 export class EPD {
   private usb: USBInterface;
   private vcom: number;
+  private minRefreshInterval: number;
+  private lastRefreshTime: number = 0;
 
   // Device info (populated after init)
   private _width: number | null = null;
@@ -42,8 +48,17 @@ export class EPD {
   private _lutVersion: string | null = null;
 
   constructor(config: EPDConfig = {}) {
-    this.vcom = config.vcom ?? -2.06;
-    this.usb = new USBInterface({ timeout: config.timeout });
+    // Handle VCOM preset or direct value
+    if (typeof config.vcom === 'string') {
+      this.vcom = VCOM_PRESETS[config.vcom] ?? VCOM_PRESETS.DEFAULT;
+    } else {
+      this.vcom = config.vcom ?? VCOM_PRESETS.DEFAULT;
+    }
+    this.minRefreshInterval = config.minRefreshInterval ?? 1000;
+    this.usb = new USBInterface({ 
+      timeout: config.timeout,
+      vcomEndian: config.vcomEndian ?? EndianTypes.LITTLE,
+    });
   }
 
   /** Display width in pixels */
@@ -152,6 +167,14 @@ export class EPD {
     height: number,
     mode: DisplayModes,
   ): Promise<void> {
+    // Check refresh rate
+    const now = Date.now();
+    const interval = now - this.lastRefreshTime;
+    if (interval < this.minRefreshInterval) {
+      throw new RefreshRateError(interval, this.minRefreshInterval);
+    }
+    this.lastRefreshTime = now;
+    
     await this.usb.displayArea(x, y, width, height, mode, true);
   }
 
@@ -252,7 +275,7 @@ export class EPD {
    */
   private validateVCOM(vcom: number): void {
     if (vcom >= 0 || vcom <= -5) {
-      throw new Error("VCOM must be between -5 and 0 (typically -1.5 to -2.5)");
+      throw new VCOMOutOfRangeError(vcom, -5, 0);
     }
   }
 }

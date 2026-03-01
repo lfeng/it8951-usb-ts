@@ -5,7 +5,7 @@
  */
 
 import { getDeviceList, Device, Interface, InEndpoint, OutEndpoint } from "usb";
-import { USB_VENDOR_ID, USB_PRODUCT_ID, Registers, DisplayModes } from "./constants.js";
+import { USB_VENDOR_ID, USB_PRODUCT_ID, Registers, DisplayModes, EndianTypes, SCSIStatus, SCSIError } from "./constants.js";
 
 /** Device information returned by GET_SYS command */
 export interface DeviceInfo {
@@ -23,6 +23,8 @@ export interface USBInterfaceOptions {
   /** Vendor ID (default: IT8951 vendor ID) */
   vendorId?: number;
   /** Product ID (default: IT8951 product ID) */
+  //** VCOM byte order (default: LITTLE endian) */
+  vcomEndian?: EndianTypes;
   productId?: number;
 }
 
@@ -62,11 +64,13 @@ export class USBInterface {
   private timeout: number;
   private tag: number = 0;
   private _imageBufferAddress: number = 0;
+  private vcomEndian: EndianTypes;
 
   constructor(options: USBInterfaceOptions = {}) {
     this.vendorId = options.vendorId ?? USB_VENDOR_ID;
     this.productId = options.productId ?? USB_PRODUCT_ID;
     this.timeout = options.timeout ?? 5000;
+    this.vcomEndian = options.vcomEndian ?? EndianTypes.LITTLE;
   }
 
   /**
@@ -326,8 +330,14 @@ export class USBInterface {
     const cmd = Buffer.from(SCSI_PMIC_CTRL);
 
     if (vcom !== null) {
-      cmd[7] = (vcom >> 8) & 0xff;
-      cmd[8] = vcom & 0xff;
+      // Write VCOM with configured endian
+      if (this.vcomEndian === EndianTypes.LITTLE) {
+        cmd[7] = vcom & 0xff;          // Low byte first
+        cmd[8] = (vcom >> 8) & 0xff;   // High byte second
+      } else {
+        cmd[7] = (vcom >> 8) & 0xff;   // High byte first
+        cmd[8] = vcom & 0xff;          // Low byte second
+      }
       cmd[9] = 1; // Set VCOM
     }
 

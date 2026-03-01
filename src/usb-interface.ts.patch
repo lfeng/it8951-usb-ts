@@ -1,0 +1,20 @@
+
+  /**
+   * Get current VCOM value
+   * @returns VCOM value in millivolts (e.g., 1500 for -1.5V)
+   */
+  async getVCOM(): Promise<number> {
+    // Build GET_VCOM command (similar to set but with read flag)
+    const cmd = Buffer.from(SCSI_PMIC_CTRL);
+    cmd[7] = 0x00; // Placeholder
+    cmd[8] = 0x00;
+    cmd[9] = 0; // Read mode
+    
+    const data = await this.scsiRead(cmd, 2);
+    const vcom = this.vcomEndian === EndianTypes.LITTLE
+      ? data.readUInt16LE(0)
+      : data.readUInt16BE(0);
+    
+    return vcom;
+  }
+

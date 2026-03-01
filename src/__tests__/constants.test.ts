@@ -55,7 +55,7 @@ describe('Constants', () => {
   describe('PixelModes', () => {
     it('should have correct pixel format modes', () => {
       expect(PixelModes.M_2BPP).toBe(0);
-      expect(PixelModes.M_3BPP).toBe(1);
+      expect(PixelModes.M_4BPP).toBe(1);
       expect(PixelModes.M_4BPP).toBe(2);
       expect(PixelModes.M_8BPP).toBe(3);
     });

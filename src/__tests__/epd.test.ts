@@ -80,7 +80,7 @@ describe('EPD', () => {
   describe('getBppValue', () => {
     it('should return correct bits per pixel', () => {
       expect((epd as any).getBppValue(PixelModes.M_2BPP)).toBe(2);
-      expect((epd as any).getBppValue(PixelModes.M_3BPP)).toBe(3);
+      expect((epd as any).getBppValue(PixelModes.M_4BPP)).toBe(3);
       expect((epd as any).getBppValue(PixelModes.M_4BPP)).toBe(4);
       expect((epd as any).getBppValue(PixelModes.M_8BPP)).toBe(8);
     });

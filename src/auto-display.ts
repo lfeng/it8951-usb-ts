@@ -26,6 +26,8 @@ export interface AutoDisplayOptions {
  */
 export abstract class AutoDisplay {
   protected frameBuffer: Uint8Array;
+  private bufferPool: Uint8Array[] = [];
+  private peakMemoryUsage: number = 0;
   protected previousFrame: Uint8Array | null = null;
   protected displayWidth: number;
   protected displayHeight: number;
@@ -146,6 +148,43 @@ export abstract class AutoDisplay {
    * @param region - [x, y, width, height]
    * @param mode - Display mode
    */
+
+  /**
+   * Allocate buffer from pool or create new
+   */
+  protected allocateBuffer(size: number): Uint8Array {
+    const existing = this.bufferPool.find(b => b.length >= size);
+    if (existing) {
+      this.bufferPool = this.bufferPool.filter(b => b !== existing);
+      return existing;
+    }
+    const buffer = new Uint8Array(size);
+    this.peakMemoryUsage = Math.max(this.peakMemoryUsage, buffer.length);
+    return buffer;
+  }
+
+  /**
+   * Return buffer to pool for reuse
+   */
+  protected returnBuffer(buffer: Uint8Array): void {
+    if (this.bufferPool.length < 5) { // Limit pool size
+      buffer.fill(0);
+      this.bufferPool.push(buffer);
+    }
+  }
+
+  /**
+   * Get memory usage statistics
+   */
+  getMemoryUsage(): { current: number; peak: number; poolSize: number } {
+    const current = this.frameBuffer.length + (this.previousFrame?.length ?? 0);
+    return {
+      current,
+      peak: this.peakMemoryUsage,
+      poolSize: this.bufferPool.length,
+    };
+  }
+
   protected abstract update(
     data: Uint8Array,
     region: [number, number, number, number],

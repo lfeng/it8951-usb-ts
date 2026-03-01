@@ -38,12 +38,11 @@ export enum Rotate {
   CCW = 3, // 90° counter-clockwise
 }
 
-/** Pixel formats (bits per pixel) */
+/** Pixel formats (bits per pixel) - Removed non-standard 3bpp */
 export enum PixelModes {
   M_2BPP = 0,
-  M_3BPP = 1,
-  M_4BPP = 2,
-  M_8BPP = 3,
+  M_4BPP = 1,
+  M_8BPP = 2,
 }
 
 /** Display waveform modes */
@@ -109,3 +108,106 @@ export const DEFAULT_DISPLAY_MODES = {
   /** Full refresh to clear ghosting */
   FULL_REFRESH: DisplayModes.INIT,
 } as const;
+
+/**
+ * VCOM voltage presets for common e-paper displays
+ */
+export const VCOM_PRESETS = {
+  WAVESHARE_6INCH: -1.5,
+  WAVESHARE_7_8INCH: -2.3,
+  WAVESHARE_10_3INCH: -2.0,
+  DEFAULT: -2.0,
+} as const;
+
+/** SCSI status codes */
+export enum SCSIStatus {
+  GOOD = 0x00,
+  CHECK_CONDITION = 0x02,
+  CONDITION_MET = 0x04,
+  BUSY = 0x08,
+  INTERMEDIATE = 0x10,
+  INTERMEDIATE_CONDITION_MET = 0x14,
+  RESERVATION_CONFLICT = 0x18,
+}
+
+/** EPD error classes */
+export class EPDError extends Error {
+  public code: string;
+  public details?: any;
+  constructor(message: string, code: string, details?: any) {
+    super(message);
+    this.name = 'EPDError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class VCOMOutOfRangeError extends EPDError {
+  constructor(value: number, min: number, max: number) {
+    super(`VCOM ${value}V out of range [${min}V, ${max}V]`, 'VCOM_OUT_OF_RANGE', { value, min, max });
+    this.name = 'VCOMOutOfRangeError';
+  }
+}
+
+export class SCSIError extends EPDError {
+  constructor(status: number, senseData?: any) {
+    super(`SCSI command failed with status 0x${status.toString(16)}`, 'SCSI_COMMAND_FAILED', { status, senseData });
+    this.name = 'SCSIError';
+  }
+}
+
+export class DeviceNotFoundError extends EPDError {
+  constructor(vendorId: number, productId: number) {
+    super(`IT8951 device not found (VID: 0x${vendorId.toString(16)}, PID: 0x${productId.toString(16)})`, 'DEVICE_NOT_FOUND', { vendorId, productId });
+    this.name = 'DeviceNotFoundError';
+  }
+}
+
+export class RefreshRateError extends EPDError {
+  constructor(interval: number, minInterval: number) {
+    super(`Refresh interval ${interval}ms too short (minimum: ${minInterval}ms)`, 'REFRESH_RATE_TOO_HIGH', { interval, minInterval });
+    this.name = 'RefreshRateError';
+  }
+}
+
+/**
+ * Calculate aligned row length for IT8951 buffer
+ * IT8951 requires 4-byte alignment for each row
+ * @param width - Image width in pixels
+ * @param bpp - Bits per pixel (2, 4, or 8)
+ * @returns Aligned row length in bytes
+ */
+export function alignRowLength(width: number, bpp: number): number {
+  const pixelsPerByte = 8 / bpp;
+  const rowBytes = Math.ceil(width / pixelsPerByte);
+  // 4-byte alignment
+  return Math.ceil(rowBytes / 4) * 4;
+}
+
+/**
+ * Pad buffer to aligned row length
+ * @param buffer - Original pixel buffer
+ * @param width - Image width in pixels
+ * @param bpp - Bits per pixel
+ * @returns Padded buffer
+ */
+export function padBuffer(buffer: Uint8Array, width: number, bpp: number): Uint8Array {
+  const alignedWidth = alignRowLength(width, bpp);
+  const pixelsPerByte = 8 / bpp;
+  const originalRowBytes = Math.ceil(width / pixelsPerByte);
+  
+  if (alignedWidth === originalRowBytes) {
+    return buffer;
+  }
+  
+  const height = buffer.length / originalRowBytes;
+  const padded = new Uint8Array(alignedWidth * height);
+  
+  for (let y = 0; y < height; y++) {
+    const srcOffset = y * originalRowBytes;
+    const dstOffset = y * alignedWidth;
+    padded.set(buffer.subarray(srcOffset, srcOffset + originalRowBytes), dstOffset);
+  }
+  
+  return padded;
+}
