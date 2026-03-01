@@ -1,3 +1,5 @@
+> ⚠️ **Disclaimer**: This project is currently under active development and testing. Features may be incomplete or unstable. Use at your own risk. The authors are not responsible for any damage to your devices or hardware.
+
 # IT8951 USB Display Driver (TypeScript)
 
 English Version | [中文版本](./README_CN.md)
