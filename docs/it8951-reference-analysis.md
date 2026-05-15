@@ -16,6 +16,10 @@
   https://www.waveshare.com/wiki/6inch_e-Paper_HAT
 - Waveshare 7.8inch e-Paper HAT Wiki  
   https://www.waveshare.com/wiki/7.8inch_e-Paper_HAT
+- Waveshare 7.8inch e-Paper HAT product page  
+  https://www.waveshare.net/shop/7.8inch-e-Paper-HAT.htm
+- Waveshare 7.8inch e-Paper HAT Wiki (CN mirror)  
+  https://www.waveshare.net/wiki/7.8inch_e-Paper_HAT
 - Waveshare 9.7inch e-Paper HAT Wiki  
   https://www.waveshare.com/wiki/9.7inch_e-Paper_HAT
 - Waveshare 10.3inch e-Paper HAT Wiki  
@@ -63,6 +67,37 @@
 | 9.7inch e-Paper HAT | 1200 x 825 | Waveshare 9.7inch e-Paper HAT Wiki |
 | 10.3inch e-Paper HAT / HAT (D) | 1872 x 1404 | Waveshare 10.3inch e-Paper HAT Wiki |
 | 13.3inch e-Paper HAT | 1600 x 1200 | Waveshare 13.3inch e-Paper HAT Wiki |
+
+## 7.8inch e-Paper HAT 设备档案
+
+当前 examples 主要按微雪 `7.8inch e-Paper HAT` / SKU `16766` 补充文档。
+该产品页和 Wiki 都说明控制板引出 USB/SPI/I80 接口；本项目只实现 USB SCSI 路径。
+
+| 项目 | 参数 |
+| --- | --- |
+| 控制器 | IT8951 |
+| 屏幕尺寸 | 7.8 英寸 |
+| 分辨率 | 1872 x 1404 |
+| 显示颜色 | 黑、白 |
+| 灰度等级 | 2-16 级，1-4 bpp |
+| 通信接口 | USB / SPI / I80 |
+| 工作电压 | 5V |
+| 外形尺寸 | 173.8 x 127.6 x 0.78 mm |
+| 显示尺寸 | 158.184 x 118.638 mm |
+| 点距 | 0.0845 x 0.0845 mm |
+| 可视角度 | >170 度 |
+| 全局刷新 | 商城页标注 <1s；Wiki 参数表标注 450ms 测试值 |
+| 总刷新功耗 | 1.2W typ. |
+| 总待机功耗 | 0.1W typ. |
+| 工作温度 | 0 ~ 50 ℃ |
+| 存储温度 | -25 ~ 70 ℃ |
+| 配置清单 | 7.8inch e-Paper、e-Paper IT8951 Driver HAT (B)、7.8inch e-Paper Adapter、40PIN FFC、USB A 转 micro 线、RPi 铜柱包、PH2.0 8PIN 线 |
+
+硬件注意事项：
+
+- 7.8inch e-Paper 尺寸较大，面板和 FPC 排线都比较脆弱；研发调试时建议在 FPC 排线处贴透明胶加固。
+- 不可带电插拔 e-paper。
+- VCOM 应从 FPC 线上查看实际数值，并作为运行参数传入；README 中的 `WAVESHARE_7_8INCH` 只是项目预设值。
 
 ## 当前项目对齐结果
 

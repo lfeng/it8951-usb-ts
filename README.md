@@ -69,6 +69,43 @@ sudo env "PATH=$PATH" IT8951_VCOM=2.3 npx tsx examples/basic.ts
 On many systems, hardware examples need `sudo` unless you have configured udev
 or equivalent USB permissions for VID `0x048d`, PID `0x8951`.
 
+## Tested Device Profile
+
+The primary hardware target for the current examples is Waveshare
+`7.8inch e-Paper HAT` / SKU `16766`. The product supports USB, SPI, and I80
+interfaces, but this package implements the USB SCSI path.
+
+Source: [Waveshare product page](https://www.waveshare.net/shop/7.8inch-e-Paper-HAT.htm)
+and [Waveshare Wiki](https://www.waveshare.net/wiki/7.8inch_e-Paper_HAT).
+
+| Item | Value |
+| --- | --- |
+| Controller | IT8951 |
+| Panel size | 7.8 inch |
+| Resolution | 1872 x 1404 |
+| Display colors | Black, white |
+| Grayscale | 2-16 levels, 1-4 bpp |
+| Interfaces exposed by board | USB / SPI / I80 |
+| Working voltage | 5V |
+| Outline size | 173.8 x 127.6 x 0.78 mm |
+| Active display area | 158.184 x 118.638 mm |
+| Dot pitch | 0.0845 x 0.0845 mm |
+| Viewing angle | >170 deg |
+| Global refresh | Product page: <1s; Wiki parameter table: 450ms test value |
+| Typical refresh power | 1.2W |
+| Typical standby power | 0.1W |
+| Operating temperature | 0 to 50 C |
+| Storage temperature | -25 to 70 C |
+| Kit contents | 7.8inch e-Paper, IT8951 Driver HAT (B), adapter, 40-pin FFC, USB A-to-micro cable, RPi standoffs, PH2.0 8-pin cable |
+
+Hardware notes from the Wiki:
+
+- The 7.8inch panel and FPC are fragile. Reinforce the FPC area during
+  development if the setup is moved often.
+- Do not plug or unplug the e-paper panel while powered.
+- Read the actual VCOM from the panel FPC label and pass it with
+  `IT8951_VCOM`; do not rely on a generic preset for long-term use.
+
 ## Quick Start
 
 Package usage:

@@ -67,6 +67,40 @@ sudo env "PATH=$PATH" IT8951_VCOM=2.3 npx tsx examples/basic.ts
 多数系统上，硬件 examples 需要 `sudo`。如果你已经为 VID `0x048d`、PID
 `0x8951` 配置了 udev 或等价 USB 权限，则可以不使用 `sudo`。
 
+## 已验证设备信息
+
+当前 examples 的主要目标设备是微雪 `7.8inch e-Paper HAT` / SKU `16766`。
+该产品引出 USB、SPI、I80 三种接口，但本项目实现的是 USB SCSI 路径。
+
+来源：[微雪商城产品页](https://www.waveshare.net/shop/7.8inch-e-Paper-HAT.htm)
+和 [微雪 Wiki](https://www.waveshare.net/wiki/7.8inch_e-Paper_HAT)。
+
+| 项目 | 参数 |
+| --- | --- |
+| 控制器 | IT8951 |
+| 屏幕尺寸 | 7.8 英寸 |
+| 分辨率 | 1872 x 1404 |
+| 显示颜色 | 黑、白 |
+| 灰度等级 | 2-16 级，1-4 bpp |
+| 控制板接口 | USB / SPI / I80 |
+| 工作电压 | 5V |
+| 外形尺寸 | 173.8 x 127.6 x 0.78 mm |
+| 显示尺寸 | 158.184 x 118.638 mm |
+| 点距 | 0.0845 x 0.0845 mm |
+| 可视角度 | >170 度 |
+| 全局刷新 | 商城页标注 <1s；Wiki 参数表标注 450ms 测试值 |
+| 典型刷新功耗 | 1.2W |
+| 典型待机功耗 | 0.1W |
+| 工作温度 | 0 ~ 50 ℃ |
+| 存储温度 | -25 ~ 70 ℃ |
+| 配置清单 | 7.8inch e-Paper、IT8951 Driver HAT (B)、转接板、40PIN FFC、USB A 转 micro 线、RPi 铜柱包、PH2.0 8PIN 线 |
+
+Wiki 中的硬件注意事项：
+
+- 7.8 英寸屏幕和 FPC 排线比较脆弱，开发调试时建议加固 FPC 区域。
+- 不可带电插拔 e-paper。
+- VCOM 以屏幕 FPC 标签实际值为准，通过 `IT8951_VCOM` 传入；长期使用不要只依赖通用预设。
+
 ## 快速开始
 
 作为包使用时：
