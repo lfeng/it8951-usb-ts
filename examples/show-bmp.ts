@@ -15,7 +15,8 @@
 
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { EPD, DisplayModes } from "../src/index.js";
+import { DisplayModes } from "../src/index.js";
+import { createEPD, logHardwareUsage } from "./example-utils.js";
 import {
   readBMP,
   findMatchingImages,
@@ -30,8 +31,9 @@ const __dirname = path.dirname(__filename);
 async function main() {
   console.log("IT8951 Show BMP Example");
   console.log("=======================\n");
+  logHardwareUsage("examples/show-bmp.ts");
 
-  const epd = new EPD({ vcom: -2.06 });
+  const epd = createEPD();
 
   try {
     console.log("Initializing display...");
@@ -117,7 +119,6 @@ async function main() {
     console.log("Displaying image with GC16 mode (best quality)...");
     await epd.loadImageArea(image.pixels);
     await epd.displayArea(0, 0, epd.width, epd.height, DisplayModes.GC16);
-    await epd.waitDisplayReady();
 
     console.log("\nImage displayed successfully!");
     console.log("Press Ctrl+C to exit (display will remain)");

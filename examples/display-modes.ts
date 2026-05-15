@@ -15,7 +15,8 @@
 
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { EPD, DisplayModes } from "../src/index.js";
+import { DisplayModes } from "../src/index.js";
+import { createEPD, logHardwareUsage, SAFE_REFRESH_DELAY_MS, sleep } from "./example-utils.js";
 import {
   readBMP,
   findMatchingImages,
@@ -54,15 +55,12 @@ const MODE_INFO: Record<number, { name: string; description: string }> = {
   },
 };
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function main() {
   console.log("IT8951 Display Modes Comparison");
   console.log("================================\n");
+  logHardwareUsage("examples/display-modes.ts");
 
-  const epd = new EPD({ vcom: -2.06 });
+  const epd = createEPD();
 
   try {
     console.log("Initializing display...");
@@ -134,9 +132,7 @@ async function main() {
       const clearBuffer = new Uint8Array(epd.width * epd.height).fill(0xff);
       await epd.loadImageArea(clearBuffer);
       await epd.displayArea(0, 0, epd.width, epd.height, DisplayModes.DU);
-      await epd.waitDisplayReady();
-
-      await sleep(500);
+      await sleep(SAFE_REFRESH_DELAY_MS);
 
       // Display image with the test mode
       console.log(`  Displaying with ${info.name} mode...`);
@@ -144,7 +140,6 @@ async function main() {
 
       await epd.loadImageArea(testImage.pixels);
       await epd.displayArea(0, 0, epd.width, epd.height, mode);
-      await epd.waitDisplayReady();
 
       const elapsed = Date.now() - startTime;
       console.log(`  Complete! (${elapsed}ms)\n`);

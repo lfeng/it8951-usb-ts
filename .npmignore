@@ -1,0 +1,44 @@
+# Source files - only publish built dist
+src/
+
+# Test files in dist (generated from src/__tests__ and src/__mocks__)
+dist/__tests__/
+dist/__mocks__/
+
+# Development configs
+.eslintrc.json
+tsconfig.json
+tsconfig.build.json
+jest.config.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# Examples (optional, uncomment if you don't want to include them)
+# examples/
+
+# Documentation markdown files (keep README)
+*.md
+!README.md
+
+# Qoder config
+.qoder/

@@ -2,6 +2,10 @@
 
 ## 📄 文档来源
 
+> 维护说明：这是早期协议分析记录。2026-05-15 重构后的最新资料汇总、差距分析和验证建议见
+> `docs/it8951-reference-analysis.md`。该新文档修正了 FAST_WRITE_MEM CDB 布局、60KiB USB
+> 传输限制和像素格式枚举等问题。
+
 **官方文档**: IT8951 USB Programming Guide v0.4 (2016-11-14)
 **来源**: Waveshare Electronics
 **参考**: https://files.waveshare.com/upload/c/c9/IT8951_USB_ProgrammingGuide_v.0.4_20161114.pdf
@@ -99,14 +103,14 @@ CDB[6]  = 0xA2 (Load Image)
 CDB[7-15] = 0x00
 ```
 
-**参数数据** (28 bytes + 图像数据):
+**参数数据** (20 bytes + 图像数据):
 ```
 Arg[0-3]:  图像缓冲区地址 (或 Index mode)
 Arg[4-7]:  X 坐标
 Arg[8-11]: Y 坐标
 Arg[12-15]: 宽度
 Arg[16-19]: 高度
-Arg[20-27]: 图像数据
+Arg[20...]: 图像数据
 ```
 
 **Index Mode** (v0.3+):
@@ -180,10 +184,10 @@ CDB[12-15] = 0x00
 
 | 命令 | 官方值 | 项目实现 | 状态 |
 |------|--------|----------|------|
-| GET_SYS | 0x80 | ✅ SCSI_GET_SYS | ✅ |
-| LD_IMAGE_AREA | 0xA2 | ✅ SCSI_LD_IMAGE_AREA | ✅ |
-| DPY_AREA | 0x94 | ✅ SCSI_DPY_AREA | ✅ |
-| PMIC_CTRL | 0xA3 | ✅ SCSI_PMIC_CTRL | ✅ |
+| GET_SYS | 0x80 | ✅ `buildGetSystemInfoCommand()` / `SCSICommands.GET_SYS` | ✅ |
+| LD_IMAGE_AREA | 0xA2 | ✅ `buildLoadImageAreaCommand()` / `SCSICommands.LD_IMG_AREA` | ✅ |
+| DPY_AREA | 0x94 | ✅ `buildDisplayAreaCommand()` / `SCSICommands.DPY_AREA` | ✅ |
+| PMIC_CTRL | 0xA3 | ✅ `buildPowerVcomCommand()` / `SCSICommands.PMIC_CTRL` | ✅ |
 
 ### 2. CBW 格式验证
 
@@ -198,7 +202,8 @@ cbw.writeUInt8(0, 13); // LUN = 0 ✅
 cbw.writeUInt8(16, 14); // CDB Length = 16 ✅
 ```
 
-**结论**: CBW 格式完全符合官方规格！✅
+**结论**: CBW 结构与 USB Mass Storage Bulk-Only Transport 规格一致；更高层的 CDB 与参数布局已集中到
+`src/protocol.ts` 并由回归测试覆盖。✅
 
 ### 3. CDB 格式验证
 
@@ -209,10 +214,9 @@ cbw.writeUInt8(16, 14); // CDB Length = 16 ✅
 
 **项目实现**:
 ```typescript
-const SCSI_GET_SYS = Buffer.from([
-  0xfe, 0x00, 0x38, 0x39, 0x35, 0x31, 0x80, 0x00,
-  0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-]); // ✅ 完全一致！
+const command = buildGetSystemInfoCommand();
+// [0xfe, 0x00, 0x38, 0x39, 0x35, 0x31, 0x80, 0x00,
+//  0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00]
 ```
 
 ### 4. VCOM 字节序
@@ -224,9 +228,8 @@ CDB[7-8]: VCOM 值 (文档未明确字节序)
 
 **项目实现**:
 ```typescript
-// 当前默认使用大端序 (big-endian)
-cmd[7] = (vcom >> 8) & 0xff;  // High byte
-cmd[8] = vcom & 0xff;          // Low byte
+const command = buildPowerVcomCommand(vcomMillivolts, powerOn, EndianTypes.BIG);
+// 默认使用大端序：CDB[7] = high byte, CDB[8] = low byte
 ```
 
 **建议**: 根据官方文档，IT8951 内存地址使用 **Big Endian**，但 VCOM 设置需要实际测试验证。当前实现支持配置字节序是明智的！✅
@@ -262,35 +265,37 @@ cmd[8] = vcom & 0xff;          // Low byte
 
 ## 🎯 最终结论
 
-### ✅ 项目实现完全符合官方规格
+### 2026-05-15 复核结论
 
-1. **CBW 格式**: 100% 正确 ✅
-2. **CDB 命令**: 所有命令码正确 ✅
-3. **参数结构**: 数据格式正确 ✅
-4. **字节序支持**: 提供配置选项 ✅
+项目已完成一次协议层重构：CBW/CSW、CDB、参数编码、系统信息解析和 60KiB 分块规则集中到
+`src/protocol.ts`，`USBInterface` 改为传输编排层。复核时发现并修正了三个早期误判：
 
-### 🔧 建议改进
+1. **FAST_WRITE_MEM**: 地址应位于 CDB[2..5]，长度应位于 CDB[7..8]。
+2. **LD_IMG_AREA**: 参数头是 20 bytes，不是 28 bytes；28 bytes 是 DPY_AREA 参数。
+3. **PixelModes**: datasheet 枚举为 2/3/4/8bpp = 0/1/2/3，旧实现遗漏 3bpp 并导致 4bpp/8bpp 错位。
 
-1. **添加设备识别流程**:
+### 🔧 已落地的改进
+
+1. **设备识别流程**:
    ```typescript
-   async identify(): Promise<boolean> {
+   async identify(): Promise<IdentifyResult> {
      const inquiry = await this.scsiInquiry();
-     return inquiry.includes("Generic Storage RamDisc");
+     return parseInquiryResponse(inquiry);
    }
    ```
 
-2. **支持 Index Mode**:
+2. **Index Mode**:
    ```typescript
    async loadImageAreaIndexed(index: number, ...) {
-     const addr = 0x80000000 | (index & 0x0F);
+     const addr = indexedBufferAddress(index);
      // ...
    }
    ```
 
-3. **添加快速写入命令**:
+3. **FAST_WRITE_MEM 快速写入命令**:
    ```typescript
    async fastWriteMemory(addr: number, data: Buffer) {
-     // 0xA5 command
+     // CDB[2..5] = address, CDB[7..8] = chunk length
    }
    ```
 
@@ -306,5 +311,5 @@ cmd[8] = vcom & 0xff;          // Low byte
 
 ---
 
-**分析时间**: 2026-03-01 12:56 GMT+8  
-**状态**: ✅ USB SCSI 协议验证通过
+**分析时间**: 2026-05-15 GMT+8  
+**状态**: ✅ USB SCSI 协议已按公开资料复核并重构

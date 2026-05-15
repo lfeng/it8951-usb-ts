@@ -15,7 +15,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { EPD, DisplayModes } from "../src/index.js";
+import { DisplayModes } from "../src/index.js";
+import { createEPD, logHardwareUsage, sleep } from "./example-utils.js";
 import {
   readBMP,
   scaleImage,
@@ -46,13 +47,10 @@ function findGifSequence(picDir: string): string[] {
   return gifFiles;
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function main() {
   console.log("IT8951 Animation Example");
   console.log("========================\n");
+  logHardwareUsage("examples/animation.ts");
 
   // Get FPS from command line (default 2)
   const fps = parseInt(process.argv[2] || "2", 10);
@@ -62,7 +60,7 @@ async function main() {
   console.log("Note: E-paper displays have limited refresh rates.");
   console.log("A2 mode provides fastest refresh but lowest quality.\n");
 
-  const epd = new EPD({ vcom: -2.06 });
+  const epd = createEPD({ minRefreshInterval: 0 });
 
   try {
     console.log("Initializing display...");

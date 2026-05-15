@@ -1,5 +1,9 @@
 # IT8951-USB-TS 代码审查报告
 
+> 维护说明：这是 2026-03-01 的历史审查记录。2026-05-15 的协议复核与重构结论见
+> `docs/it8951-reference-analysis.md` 和 `IT8951_USB_Protocol_Analysis.md`；当前代码已将 CDB/CBW/CSW/参数编码集中到
+> `src/protocol.ts`。
+
 ## 审查日期
 2026-03-01
 

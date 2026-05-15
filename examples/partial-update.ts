@@ -10,11 +10,8 @@
  *   npx tsx examples/partial-update.ts
  */
 
-import { EPD, DisplayModes } from "../src/index.js";
-
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { DisplayModes } from "../src/index.js";
+import { createEPD, logHardwareUsage, sleep } from "./example-utils.js";
 
 /**
  * Create a rectangular region with specified grayscale value
@@ -76,8 +73,9 @@ function createCheckerboard(
 async function main() {
   console.log("IT8951 Partial Update Example");
   console.log("==============================\n");
+  logHardwareUsage("examples/partial-update.ts");
 
-  const epd = new EPD({ vcom: -2.06 });
+  const epd = createEPD({ minRefreshInterval: 250 });
 
   try {
     console.log("Initializing display...");
@@ -158,7 +156,6 @@ async function main() {
         region.height,
         DisplayModes.DU
       );
-      await epd.waitDisplayReady();
       console.log(`    Done in ${Date.now() - startTime}ms`);
 
       await sleep(500);
@@ -207,7 +204,6 @@ async function main() {
         centerHeight,
         DisplayModes.GC16
       );
-      await epd.waitDisplayReady();
       console.log(`    Done in ${Date.now() - startTime}ms`);
 
       await sleep(1500);

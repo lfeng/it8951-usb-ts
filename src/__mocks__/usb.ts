@@ -17,12 +17,14 @@ export const mockOutEndpoint = {
   transfer: mockTransferOut,
   direction: 'out' as const,
   transferType: 2,
+  timeout: 5000,
 };
 
 export const mockInEndpoint = {
   transfer: mockTransferIn,
   direction: 'in' as const,
   transferType: 2,
+  timeout: 5000,
 };
 
 export const mockInterface = {

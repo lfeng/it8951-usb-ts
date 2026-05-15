@@ -4,7 +4,7 @@
  */
 
 import { EPD } from '../epd.js';
-import { PixelModes } from '../constants.js';
+import { VCOM_PRESETS } from '../constants.js';
 
 describe('EPD', () => {
   let epd: EPD;
@@ -26,6 +26,21 @@ describe('EPD', () => {
 
     it('should create with custom timeout', () => {
       const customEpd = new EPD({ timeout: 10000 });
+      expect(customEpd).toBeInstanceOf(EPD);
+    });
+
+    it('should create with VCOM preset', () => {
+      const presetEpd = new EPD({ vcom: 'WAVESHARE_6INCH' });
+      expect(presetEpd).toBeInstanceOf(EPD);
+    });
+
+    it('should use default VCOM for unknown preset', () => {
+      const presetEpd = new EPD({ vcom: 'UNKNOWN_PRESET' as keyof typeof VCOM_PRESETS });
+      expect(presetEpd).toBeInstanceOf(EPD);
+    });
+
+    it('should create with minRefreshInterval', () => {
+      const customEpd = new EPD({ minRefreshInterval: 2000 });
       expect(customEpd).toBeInstanceOf(EPD);
     });
   });
@@ -52,46 +67,28 @@ describe('EPD', () => {
     });
   });
 
-  describe('validateVCOM', () => {
-    it('should throw error for positive VCOM', async () => {
-      // Access private method via any
-      try {
-        await (epd as any).validateVCOM(1.5);
-        expect(true).toBe(false); // Should not reach here
-      } catch (error: any) {
-        expect(error.message).toContain('VCOM must be between');
-      }
-    });
-
-    it('should throw error for VCOM <= -5', async () => {
-      try {
-        await (epd as any).validateVCOM(-5.0);
-        expect(true).toBe(false);
-      } catch (error: any) {
-        expect(error.message).toContain('VCOM must be between');
-      }
-    });
-
-    it('should accept valid VCOM', async () => {
-      expect(() => (epd as any).validateVCOM(-2.06)).not.toThrow();
+  describe('currentVCOM', () => {
+    it('should return current VCOM value', () => {
+      expect(epd.currentVCOM).toBe(-2.06);
     });
   });
 
-  describe('getBppValue', () => {
-    it('should return correct bits per pixel', () => {
-      expect((epd as any).getBppValue(PixelModes.M_2BPP)).toBe(2);
-      expect((epd as any).getBppValue(PixelModes.M_4BPP)).toBe(3);
-      expect((epd as any).getBppValue(PixelModes.M_4BPP)).toBe(4);
-      expect((epd as any).getBppValue(PixelModes.M_8BPP)).toBe(8);
+  describe('close', () => {
+    it('should close device without error', () => {
+      expect(() => epd.close()).not.toThrow();
     });
   });
 
-  describe('sleepMs', () => {
-    it('should sleep for specified milliseconds', async () => {
-      const start = Date.now();
-      await (epd as any).sleepMs(10);
-      const end = Date.now();
-      expect(end - start).toBeGreaterThanOrEqual(9);
+  describe('waitDisplayReady', () => {
+    it('should resolve immediately', async () => {
+      await expect(epd.waitDisplayReady()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('getVCOM', () => {
+    it('should return current VCOM', async () => {
+      const vcom = await epd.getVCOM();
+      expect(vcom).toBe(-2.06);
     });
   });
 });

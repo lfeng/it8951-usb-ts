@@ -14,7 +14,8 @@
 
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { EPD, DisplayModes } from "../src/index.js";
+import { DisplayModes } from "../src/index.js";
+import { createEPD, logHardwareUsage } from "./example-utils.js";
 import {
   readBMP,
   findMatchingImages,
@@ -28,12 +29,13 @@ const __dirname = path.dirname(__filename);
 async function main() {
   console.log("IT8951 Slideshow Example");
   console.log("========================\n");
+  logHardwareUsage("examples/slideshow.ts");
 
   // Get interval from command line (default 5 seconds)
   const interval = parseInt(process.argv[2] || "5", 10) * 1000;
   console.log(`Slideshow interval: ${interval / 1000} seconds\n`);
 
-  const epd = new EPD({ vcom: -2.06 });
+  const epd = createEPD();
 
   try {
     console.log("Initializing display...");
@@ -115,7 +117,6 @@ async function main() {
 
       await epd.loadImageArea(image.pixels);
       await epd.displayArea(0, 0, epd.width, epd.height, DisplayModes.GC16);
-      await epd.waitDisplayReady();
 
       console.log("  Done. Waiting for next image...\n");
 

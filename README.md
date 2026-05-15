@@ -1,23 +1,27 @@
-> ⚠️ **Disclaimer**: This project is currently under active development and testing. Features may be incomplete or unstable. Use at your own risk. The authors are not responsible for any damage to your devices or hardware.
+> ⚠️ **Disclaimer**: This project is under active hardware validation. Set the
+> correct VCOM for your panel before running display examples. Frequent refreshes
+> or an incorrect VCOM value may shorten panel life or damage hardware.
 
 # IT8951 USB Display Driver (TypeScript)
 
 English Version | [中文版本](./README_CN.md)
 
-Node.js + TypeScript driver for IT8951 e-paper display controllers via USB.
+Node.js + TypeScript driver for IT8951 e-paper display controllers over the USB
+SCSI protocol. It targets Waveshare-style IT8951 USB boards and exposes both a
+high-level `EPD` API and a lower-level `USBInterface` API.
 
 ## Features
 
-- 📘 **TypeScript Support** - Full type definitions for better IDE support
-- 🔌 **USB Interface** - Cross-platform USB communication (no Raspberry Pi required)
-- 🎨 **Partial Updates** - Automatic detection and update of changed regions
-- 🔄 **Multiple Display Modes** - Support for INIT, DU, GC16, A2, and more
-- 🗂️ **Index Mode** - Support for up to 16 separate image buffers
-- 🚀 **Fast Write** - Optimized memory write command (up to 30MB/s)
-- 🔍 **Device Identification** - SCSI Inquiry support to verify IT8951 controllers
-- ✅ **Comprehensive Testing** - Jest test suite with 60+ tests and coverage reporting
-- 📝 **Well Documented** - Comprehensive examples and API documentation
-- 🚀 **Modern ES Modules** - Uses ES module syntax
+- TypeScript-first public API with generated declaration files
+- USB SCSI transport using the `usb` package and libusb
+- Device identification through SCSI INQUIRY
+- High-level image loading, display updates, VCOM, and power controls
+- Partial update helpers and automatic change-region tracking
+- Indexed buffer operations for controllers that expose multiple image buffers
+- FAST_WRITE_MEM support for large memory writes
+- Official waveform modes: `INIT`, `DU`, `GC16`, `GL16`, `GLR16`, `GLD16`, `A2`, and `DU4`
+- Jest test suite with mocked USB devices
+- Hardware examples that run directly from TypeScript with `tsx`
 
 ## Installation
 
@@ -27,247 +31,255 @@ npm install
 
 ### System Dependencies
 
-#### macOS
+macOS:
+
 ```bash
 brew install libusb
 ```
 
-#### Linux (Ubuntu/Debian)
+Ubuntu / Debian:
+
 ```bash
 sudo apt-get install libusb-1.0-0-dev
 ```
 
+Node.js 18 or newer is required.
+
+## Hardware Safety
+
+1. Connect the IT8951 USB controller and power the panel according to your board
+   documentation.
+2. Find the VCOM value printed on the e-paper panel FPC label or product page.
+3. Pass that value through `IT8951_VCOM` before any real display refresh.
+
+Examples default to the `WAVESHARE_7_8INCH` preset (`-2.3V`), but you should
+override it if your panel label says otherwise:
+
+```bash
+sudo env "PATH=$PATH" IT8951_VCOM=-2.3 npx tsx examples/basic.ts
+```
+
+Use a positive value only if you prefer that input style; the example helper
+normalizes it to a negative VCOM internally:
+
+```bash
+sudo env "PATH=$PATH" IT8951_VCOM=2.3 npx tsx examples/basic.ts
+```
+
+On many systems, hardware examples need `sudo` unless you have configured udev
+or equivalent USB permissions for VID `0x048d`, PID `0x8951`.
+
 ## Quick Start
 
-```typescript
-import { EPD, DisplayModes } from './src/index.js';
+Package usage:
 
-async function main() {
-  const epd = new EPD({ vcom: -2.06 });
+```typescript
+import { EPD, DisplayModes } from "it8951-usb-ts";
+
+const epd = new EPD({ vcom: -2.3 });
+
+try {
   await epd.init();
 
-  console.log(`Display: ${epd.width} x ${epd.height}`);
+  const image = Buffer.alloc(epd.width * epd.height, 0xff);
 
-  // Clear display
-  await epd.clear();
+  for (let y = 0; y < epd.height; y++) {
+    for (let x = 0; x < epd.width; x++) {
+      image[y * epd.width + x] = Math.floor((x / epd.width) * 255);
+    }
+  }
 
-  // Create image buffer
-  const buffer = new Uint8Array(epd.width * epd.height);
-  buffer.fill(255);
-
-  // Display
-  await epd.loadImageArea(buffer);
+  await epd.loadImageArea(image);
   await epd.displayArea(0, 0, epd.width, epd.height, DisplayModes.GC16);
-  
+} finally {
   epd.close();
 }
-
-main();
 ```
 
-## Usage
+When running inside this repository, examples import from `../src/index.js` and
+are intended to be executed with `npx tsx`.
 
-### Basic Display Control
+## Running Examples
 
-```typescript
-import { EPD, DisplayModes } from './src/index.js';
+The examples are TypeScript files. Do not run them as `node examples/*.js`
+unless you have built or authored JavaScript output yourself.
 
-const epd = new EPD({ vcom: -2.06 });
-await epd.init();
+Safe data-preparation check with no hardware access:
 
-// Clear
-await epd.clear();
-
-// Display modes: INIT, DU, GC16, GL16, A2, DU4
-await epd.displayArea(0, 0, epd.width, epd.height, DisplayModes.GC16);
-
-epd.close();
+```bash
+npx tsx examples/test-prepare-data.ts
 ```
 
-### Device Identification
+Recommended hardware smoke-test order:
 
-```typescript
-import { USBInterface } from './src/usb-interface.js';
+```bash
+# 1. Minimal init / clear path
+sudo env "PATH=$PATH" IT8951_VCOM=-2.3 npx tsx examples/test-epd-minimal.ts
 
-const usb = new USBInterface();
-await usb.open();
+# 2. Basic full-screen gradient
+sudo env "PATH=$PATH" IT8951_VCOM=-2.3 npx tsx examples/basic.ts
 
-// Check if device is IT8951
-const isIT8951 = await usb.identify();
-console.log(`Device is IT8951: ${isIT8951}`);
-
-// Get raw inquiry data
-const inquiry = await usb.scsiInquiry();
-console.log('Vendor:', inquiry.subarray(8, 16).toString('ascii').trim());
-console.log('Product:', inquiry.subarray(16, 32).toString('ascii').trim());
-
-usb.close();
+# 3. Display a BMP chosen from examples/pic or a custom path
+sudo env "PATH=$PATH" IT8951_VCOM=-2.3 npx tsx examples/show-bmp.ts
+sudo env "PATH=$PATH" IT8951_VCOM=-2.3 npx tsx examples/show-bmp.ts ./examples/pic/1872x1404_0.bmp
 ```
 
-### Index Mode (Multiple Buffers)
+Additional hardware examples:
 
-```typescript
-import { EPD, DisplayModes } from './src/index.js';
+| Example | Purpose |
+| --- | --- |
+| `examples/display-modes.ts` | Compare waveform modes on the same test image |
+| `examples/partial-update.ts` | Exercise partial-region updates |
+| `examples/animation.ts` | Run A2-mode animation frames |
+| `examples/slideshow.ts` | Cycle through BMP files under `examples/pic` |
+| `examples/test-black.ts` | Draw a small black square after a white clear |
+| `examples/test-gradient.ts` | Low-level USB gradient test |
+| `examples/test-usb-direct.ts` | Low-level USB load/display path |
+| `examples/test-with-identify.ts` | Low-level USB path after explicit identity check |
+| `examples/test-alignment.ts` | Diagnose row alignment issues |
+| `examples/test-flip.ts` | Diagnose orientation and mirroring issues |
+| `examples/test-pixel-format.ts` | Inspect pixel-format behavior |
+| `examples/test-debug.ts` / `examples/test-epd-debug.ts` | Focused debug probes |
 
-const epd = new EPD();
-await epd.init();
+All hardware examples can refresh the panel. Keep delays between manual reruns
+and avoid running animation or partial-update loops repeatedly while tuning.
 
-// Load images to different buffer indices
-const buffer1 = new Uint8Array(epd.width * epd.height).fill(200);
-const buffer2 = new Uint8Array(epd.width * epd.height).fill(100);
+## Image Data
 
-await epd.loadImageAreaIndexed(0, buffer1); // Load to buffer 0
-await epd.loadImageAreaIndexed(1, buffer2); // Load to buffer 1
+The high-level API expects 8-bit grayscale image data:
 
-// Display from different buffers
-await epd.displayAreaIndexed(0, 0, 0, epd.width, epd.height, DisplayModes.GC16);
-await new Promise(resolve => setTimeout(resolve, 2000));
-await epd.displayAreaIndexed(1, 0, 0, epd.width, epd.height, DisplayModes.GC16);
+- `0x00` = black
+- `0xff` = white
+- one byte per pixel
+- full-screen buffer length = `epd.width * epd.height`
 
-epd.close();
-```
-
-### Fast Write Memory
-
-```typescript
-import { USBInterface } from './src/usb-interface.js';
-
-const usb = new USBInterface();
-await usb.open();
-
-const info = await usb.getDeviceInfo();
-const address = info.imageBufferAddress;
-
-// Fast write for large data transfers (up to 30MB/s)
-const largeBuffer = Buffer.alloc(1024 * 1024); // 1MB
-await usb.fastWriteMemory(address, largeBuffer);
-
-usb.close();
-```
-
-### Auto Display (Partial Updates)
-
-```typescript
-import { EPD, AutoEPDDisplay, DisplayModes } from './src/index.js';
-
-const epd = new EPD();
-await epd.init();
-
-const autoDisplay = new AutoEPDDisplay(epd);
-
-// Automatic partial updates
-await autoDisplay.drawPartial(DisplayModes.DU);
-
-// Full update
-await autoDisplay.drawFull(DisplayModes.GC16);
-
-epd.close();
-```
+`loadImageArea(buffer, options)` accepts `Buffer` or `Uint8Array`. If you pass
+`x`, `y`, `width`, or `height`, the driver crops data that falls outside the
+visible panel area.
 
 ## Display Modes
 
-| Mode | Name | Speed | Quality | Use Case |
-|------|------|-------|---------|----------|
-| `INIT` | Initialization | Slow | High | Full refresh |
-| `DU` | Direct Update | Fast | Medium | Text |
-| `GC16` | Grayscale 16 | Medium | High | Images |
-| `A2` | Animation | Very Fast | Low | Video |
+| Mode | Typical Time | Quality | Use Case |
+| --- | ---: | --- | --- |
+| `INIT` | ~2000 ms | Full reset | Initial clear and ghosting removal |
+| `DU` | ~260 ms | Fast monochrome-ish update | Text and line drawings |
+| `GC16` | ~450 ms | High quality 16-gray | Images and final refreshes |
+| `GL16` | ~450 ms | 16-gray optimized | Text on white backgrounds |
+| `GLR16` | ~450 ms | 16-gray remap | Reduced artifacts with preprocessing |
+| `GLD16` | ~450 ms | 16-gray dither | Dithered high-quality images |
+| `A2` | ~120 ms | Fast black/white | Animation and rapid changes |
+| `DU4` | ~290 ms | Fast 4-gray | Fast limited-grayscale updates |
 
-## Testing
+The `EPD` class enforces a minimum refresh interval by default. You can raise it
+for safer experiments:
 
-This project includes a comprehensive test suite using Jest with TypeScript support.
-
-### Running Tests
-
-```bash
-# Run all tests with coverage
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with verbose output
-npm run test:verbose
+```typescript
+const epd = new EPD({
+  vcom: -2.3,
+  minRefreshInterval: 2000,
+});
 ```
 
-### Test Coverage
+## VCOM Presets
 
-The test suite includes:
+```typescript
+import { EPD, VCOM_PRESETS } from "it8951-usb-ts";
 
-- **Unit Tests**: Tests for individual modules (constants, usb-interface, epd, auto-display)
-- **Integration Tests**: Tests for module interactions and error handling
-- **Coverage Reports**: HTML and text coverage reports generated in `coverage/` directory
+const epdFromPreset = new EPD({ vcom: "WAVESHARE_7_8INCH" });
+const epdFromVolts = new EPD({ vcom: -2.3 });
 
-Current coverage:
-- **Statements**: 53%+
-- **Branches**: 49%+
-- **Functions**: 55%+
-- **Lines**: 53%+
-
-### Test Files
-
-- `src/__tests__/constants.test.ts` - Constants and enum validation
-- `src/__tests__/usb-interface.test.ts` - USB communication layer tests
-- `src/__tests__/epd.test.ts` - EPD controller tests
-- `src/__tests__/auto-display.test.ts` - Auto display and partial update tests
-- `src/__tests__/integration.test.ts` - Integration and error handling tests
-
-### Coverage Reports
-
-After running tests, view the HTML coverage report:
-
-```bash
-open coverage/index.html
+console.log(VCOM_PRESETS.WAVESHARE_7_8INCH); // -2.3
 ```
+
+Available presets:
+
+| Preset | VCOM |
+| --- | ---: |
+| `WAVESHARE_6INCH` | `-1.5V` |
+| `WAVESHARE_7_8INCH` | `-2.3V` |
+| `WAVESHARE_10_3INCH` | `-2.0V` |
+| `DEFAULT` | `-2.0V` |
+
+## API Reference
+
+### `EPD`
+
+High-level controller for most applications.
+
+- `new EPD(config?)`
+- `init()` - open USB, identify device, read system info, set VCOM
+- `close()` - release USB resources
+- `clear()` - white clear using `INIT` and `GC16`
+- `loadImageArea(buffer, options?)` - load grayscale pixels to device memory
+- `loadImageAreaIndexed(index, buffer, options?)` - load pixels to an indexed buffer
+- `loadImageAreaFast(buffer, options?)` - write directly with FAST_WRITE_MEM
+- `displayArea(x, y, width, height, mode)` - refresh an area
+- `displayAreaIndexed(index, x, y, width, height, mode)` - refresh from an indexed buffer
+- `display(buffer, mode?)` - load and display a full-screen image
+- `displayPartial(buffer, x, y, width, height, mode?)` - load and display a region
+- `displayWithGhostRemoval(buffer, mode)` - follow fast modes with a GC16 refresh
+- `enterA2Mode()` / `exitA2Mode()` - A2 transition helpers
+- `displayA2Sequence(frames, frameDelay?)` - run a sequence of A2 frames
+- `waitDisplayReady()` - no-op compatibility helper; USB display commands wait internally
+- `setVCOM(voltage)` / `getVCOM()` - set or return the current configured VCOM
+- `standby()` / `sleep()` / `run()` - power-state helpers
+- `getDeviceInfo()` - return initialized display metadata
+
+Common properties after `init()`:
+
+- `width`, `height`
+- `imageBufferAddress`
+- `firmwareVersion`, `lutVersion`
+- `numBuffers`, `temperatureNo`, `modeNo`
+- `currentVCOM`
+
+### `USBInterface`
+
+Low-level transport for diagnostics and protocol tests.
+
+- `open()` / `close()`
+- `identify()` / `scsiInquiry()`
+- `getDeviceInfo()` / `getSystemInfo()`
+- `loadImageArea(x, y, width, height, data)`
+- `loadImageAreaIndexed(index, x, y, width, height, data)`
+- `loadImageAreaAligned(x, y, width, height, data, bpp)`
+- `displayArea(x, y, width, height, mode, waitReady?)`
+- `displayAreaIndexed(index, x, y, width, height, mode, waitReady?)`
+- `fastWriteMemory(address, data)`
+- `setPowerVcom(vcomMillivolts, powerOn)`
+
+Prefer `EPD` unless you are validating protocol behavior or debugging USB
+transfers directly.
 
 ## Development
 
 ```bash
-# Build
+# Build TypeScript output
 npm run build
 
 # Watch mode
 npm run dev
 
-# Run tests
+# Lint source
+npm run lint
+
+# Run all Jest tests with coverage
 npm test
 
-# Run example
-node examples/basic.js
+# Run one test file
+npx jest src/__tests__/epd.test.ts
+
+# Type-check examples
+npx tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck --strict examples/*.ts
 ```
 
-## API Reference
+The Jest tests use `src/__mocks__/usb.ts` and do not require a physical display.
 
-### EPD Class
+## Protocol Notes
 
-- `init()` - Initialize display
-- `close()` - Close connection
-- `clear()` - Clear display
-- `loadImageArea(buffer, options)` - Load image
-- `loadImageAreaIndexed(index, buffer, options)` - Load image to indexed buffer
-- `displayArea(x, y, w, h, mode)` - Display region
-- `displayAreaIndexed(index, x, y, w, h, mode)` - Display from indexed buffer
-- `waitDisplayReady()` - Wait for ready
-- `setVCOM(voltage)` / `getVCOM()` - VCOM control
-
-### USBInterface Class
-
-- `open()` - Open USB connection
-- `close()` - Close connection
-- `scsiInquiry()` - Send SCSI Inquiry command
-- `identify()` - Check if device is IT8951
-- `getDeviceInfo()` - Get device information
-- `loadImageArea(x, y, w, h, data)` - Load image data
-- `loadImageAreaIndexed(index, x, y, w, h, data)` - Load to indexed buffer
-- `displayArea(x, y, w, h, mode, wait)` - Display area
-- `displayAreaIndexed(index, x, y, w, h, mode, wait)` - Display from indexed buffer
-- `fastWriteMemory(addr, data)` - Fast memory write (up to 30MB/s)
-- `setPowerVcom(vcom, powerOn)` - Set VCOM and power state
-
-### Properties
-
-- `width`, `height` - Display dimensions
-- `firmwareVersion`, `lutVersion` - Version info
+See [`docs/it8951-reference-analysis.md`](./docs/it8951-reference-analysis.md)
+for the current protocol reference summary, implementation alignment notes, and
+hardware verification guidance.
 
 ## License
 

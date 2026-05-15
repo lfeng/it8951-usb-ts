@@ -1,6 +1,6 @@
 {
   "name": "it8951-usb-ts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Node.js + TypeScript driver for IT8951 e-paper display controller via USB",
   "keywords": [
     "display",
@@ -16,6 +16,14 @@
     "type": "git",
     "url": "git+https://github.com/lfeng/it8951-usb-ts.git"
   },
+  "files": [
+    "dist/*.js",
+    "dist/*.d.ts",
+    "dist/*.js.map",
+    "dist/*.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

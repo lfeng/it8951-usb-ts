@@ -3,8 +3,8 @@
  * Tests for automatic partial update functionality
  */
 
-import { AutoEPDDisplay, AutoDisplay, BoundingBox } from '../auto-display.js';
-import { DisplayModes, PixelModes } from '../constants.js';
+import { DisplayModes } from '../constants.js';
+import { AutoEPDDisplay, AutoDisplay, BoundingBox, } from '../auto-display.js';
 
 // Mock EPD
 const mockWaitDisplayReady = jest.fn().mockResolvedValue(undefined);
@@ -43,6 +43,21 @@ describe('AutoDisplay', () => {
 
     public getPreviousFrame(): Uint8Array | null {
       return this.previousFrame;
+    }
+
+    public testGetSourceIndex(x: number, y: number, width: number, height: number): number {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (this as any).getSourceIndex(x, y, width, height);
+    }
+
+    public testRoundBBox(bbox: BoundingBox, roundTo: number): BoundingBox {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (this as any).roundBBox(bbox, roundTo);
+    }
+
+    public testMergeBBox(a: BoundingBox | null, b: BoundingBox | null): BoundingBox | null {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (this as any).mergeBBox(a, b);
     }
   }
 
@@ -127,7 +142,7 @@ describe('AutoDisplay', () => {
 
     it('should track gray changes when enabled', async () => {
       const trackedDisplay = new TestAutoDisplay(800, 600, { trackGray: true });
-      
+
       await trackedDisplay.drawFull(DisplayModes.DU);
       expect(trackedDisplay).toBeDefined();
     });
@@ -171,6 +186,17 @@ describe('AutoDisplay', () => {
       const [, , width] = display.updateCalls[0].region;
       expect(width % 8).toBe(0);
     });
+
+    it('should not update if no changes', async () => {
+      await display.drawFull(DisplayModes.GC16);
+      display.updateCalls = [];
+
+      // No changes to frame buffer
+      await display.drawPartial(DisplayModes.DU);
+
+      // Should not call update if no changes
+      expect(display.updateCalls).toHaveLength(0);
+    });
   });
 
   describe('clear', () => {
@@ -192,82 +218,102 @@ describe('AutoDisplay', () => {
     });
   });
 
-  describe('computeDiffBox', () => {
-    it('should return full box when previous frame is null', () => {
-      const diffBox = (display as any).computeDiffBox(null, new Uint8Array(100));
-      expect(diffBox).toEqual([0, 0, 800, 600]);
+  describe('getSourceIndex', () => {
+    it('should calculate correct index for no rotation', () => {
+      const noRotate = new TestAutoDisplay(10, 10, { rotate: 'none' });
+      expect(noRotate.testGetSourceIndex(0, 0, 10, 10)).toBe(0);
+      expect(noRotate.testGetSourceIndex(5, 5, 10, 10)).toBe(55);
     });
 
-    it('should return null when frames are identical', () => {
-      const frame = new Uint8Array(100).fill(0xFF);
-      const diffBox = (display as any).computeDiffBox(frame, frame);
-      expect(diffBox).toBeNull();
+    it('should calculate correct index for mirror', () => {
+      const mirrored = new TestAutoDisplay(10, 10, { mirror: true });
+      expect(mirrored.testGetSourceIndex(0, 0, 10, 10)).toBe(9);
+      expect(mirrored.testGetSourceIndex(9, 0, 10, 10)).toBe(0);
     });
 
-    it('should compute bounding box of differences', () => {
-      const frame1 = new Uint8Array(100).fill(0xFF);
-      const frame2 = new Uint8Array(100).fill(0xFF);
-      frame2[50] = 0x00;
-
-      const diffBox = (display as any).computeDiffBox(frame1, frame2);
-      expect(diffBox).not.toBeNull();
+    it('should calculate correct index for clockwise rotation', () => {
+      const cwRotate = new TestAutoDisplay(10, 20, { rotate: 'cw' });
+      // For 10x20 display, cw rotation gives 20x10 buffer
+      // (0,0) in buffer should map to (19, 0) in source
+      expect(cwRotate.testGetSourceIndex(0, 0, 20, 10)).toBe(19 * 10 + 0);
     });
 
-    it('should round bounding box to specified multiple', () => {
-      const frame1 = new Uint8Array(100).fill(0xFF);
-      const frame2 = new Uint8Array(100).fill(0xFF);
-      frame2[10] = 0x00;
+    it('should calculate correct index for counter-clockwise rotation', () => {
+      const ccwRotate = new TestAutoDisplay(10, 20, { rotate: 'ccw' });
+      // For 10x20 display, ccw rotation gives 20x10 buffer
+      expect(ccwRotate.testGetSourceIndex(0, 0, 20, 10)).toBe(0 * 10 + 9);
+    });
 
-      const diffBox = (display as any).computeDiffBox(frame1, frame2, 8);
-      if (diffBox) {
-        const [minX, minY] = diffBox;
-        expect(minX % 8).toBe(0);
-        expect(minY % 8).toBe(0);
-      }
+    it('should calculate correct index for flip rotation', () => {
+      const flipRotate = new TestAutoDisplay(10, 10, { rotate: 'flip' });
+      expect(flipRotate.testGetSourceIndex(0, 0, 10, 10)).toBe(9 * 10 + 9);
+      expect(flipRotate.testGetSourceIndex(9, 9, 10, 10)).toBe(0);
+    });
+  });
+
+  describe('roundBBox', () => {
+    it('should round bounding box correctly', () => {
+      const result = display.testRoundBBox([5, 5, 15, 15], 8);
+      expect(result[0]).toBe(0); // floor(5/8)*8
+      expect(result[2]).toBe(16); // ceil(15/8)*8
+    });
+
+    it('should clamp to display bounds', () => {
+      const result = display.testRoundBBox([790, 590, 810, 610], 8);
+      expect(result[2]).toBeLessThanOrEqual(800);
+      expect(result[3]).toBeLessThanOrEqual(600);
     });
   });
 
   describe('mergeBBox', () => {
     it('should return b when a is null', () => {
       const b: BoundingBox = [10, 10, 20, 20];
-      const result = (display as any).mergeBBox(null, b);
+      const result = display.testMergeBBox(null, b);
       expect(result).toEqual(b);
     });
 
     it('should return a when b is null', () => {
       const a: BoundingBox = [10, 10, 20, 20];
-      const result = (display as any).mergeBBox(a, null);
+      const result = display.testMergeBBox(a, null);
       expect(result).toEqual(a);
     });
 
     it('should merge two bounding boxes', () => {
       const a: BoundingBox = [10, 10, 20, 20];
       const b: BoundingBox = [15, 15, 25, 25];
-      const result = (display as any).mergeBBox(a, b);
+      const result = display.testMergeBBox(a, b);
       expect(result).toEqual([10, 10, 25, 25]);
     });
   });
 
-  describe('extractRegion', () => {
-    it('should extract region from frame', () => {
-      const frame = new Uint8Array(100).fill(0xFF);
-      const region = (display as any).extractRegion(frame, 0, 0, 10, 10);
-      expect(region.length).toBe(100);
+  describe('getMemoryUsage', () => {
+    it('should return memory usage stats', () => {
+      const stats = display.getMemoryUsage();
+      expect(stats.current).toBe(800 * 600);
+      expect(stats.peak).toBe(0);
+      expect(stats.poolSize).toBe(0);
+    });
+
+    it('should update after draw', async () => {
+      await display.drawFull(DisplayModes.GC16);
+      const stats = display.getMemoryUsage();
+      expect(stats.current).toBe(800 * 600 * 2); // frameBuffer + previousFrame
     });
   });
 });
 
 describe('AutoEPDDisplay', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let epd: any;
   let autoDisplay: AutoEPDDisplay;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     mockWaitDisplayReady.mockResolvedValue(undefined);
     mockLoadImageArea.mockResolvedValue(undefined);
     mockDisplayArea.mockResolvedValue(undefined);
-    
+
     const EPD = jest.requireMock('../epd.js').EPD;
     epd = new EPD();
     autoDisplay = new AutoEPDDisplay(epd);
@@ -299,6 +345,7 @@ describe('AutoEPDDisplay', () => {
       const data = new Uint8Array(100).fill(0xFF);
       const region: [number, number, number, number] = [0, 0, 10, 10];
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (autoDisplay as any).update(data, region, DisplayModes.GC16);
 
       expect(mockWaitDisplayReady).toHaveBeenCalled();
@@ -308,6 +355,7 @@ describe('AutoEPDDisplay', () => {
       const data = new Uint8Array(100).fill(0xFF);
       const region: [number, number, number, number] = [0, 0, 10, 10];
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (autoDisplay as any).update(data, region, DisplayModes.GC16);
 
       expect(mockLoadImageArea).toHaveBeenCalledWith(data, {
@@ -315,7 +363,6 @@ describe('AutoEPDDisplay', () => {
         y: 0,
         width: 10,
         height: 10,
-        pixelFormat: PixelModes.M_4BPP,
       });
     });
 
@@ -323,6 +370,7 @@ describe('AutoEPDDisplay', () => {
       const data = new Uint8Array(100).fill(0xFF);
       const region: [number, number, number, number] = [0, 0, 10, 10];
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (autoDisplay as any).update(data, region, DisplayModes.GC16);
 
       expect(mockDisplayArea).toHaveBeenCalledWith(0, 0, 10, 10, DisplayModes.GC16);
